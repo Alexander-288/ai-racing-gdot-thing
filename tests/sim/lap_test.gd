@@ -25,13 +25,13 @@ func test_it_completes_a_lap() -> void:
 func test_the_lap_is_clean() -> void:
 	var session := _session()
 	session.run_until_lap(1)
-	assert_eq(session.left_track_count, 0, "ran wide on %d ticks" % session.left_track_count)
+	assert_eq(session.wall_hits, 0, "hit a barrier on %d ticks" % session.wall_hits)
 
 func test_it_keeps_going_for_several_laps() -> void:
 	# A brain that survives one lap by luck usually falls apart on the next.
 	var session := _session()
 	assert_true(session.run_until_lap(3, 6000), "only reached lap %d" % session.car.lap)
-	assert_eq(session.left_track_count, 0)
+	assert_eq(session.wall_hits, 0)
 
 func test_the_same_brain_and_track_give_the_identical_lap_twice() -> void:
 	# The determinism regression in miniature (spec 3.4). If this ever fails,

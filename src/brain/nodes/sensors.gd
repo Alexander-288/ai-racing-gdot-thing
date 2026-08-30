@@ -44,6 +44,7 @@ static func self_state() -> NodeType:
 		Port.make_output(&"lateral_speed", "Lateral Speed"),  # sideways: the feel of a slide
 		Port.make_output(&"angular_velocity", "Turn Rate"),
 		Port.make_output(&"on_track", "On Track", 0.0, 1.0, Port.Kind.BOOL),
+		Port.make_output(&"damage", "Damage", 0.0, 1.0),
 	]
 
 	t.sense = func(snapshot: SensorSnapshot, _cfg: Dictionary) -> Dictionary:
@@ -53,6 +54,7 @@ static func self_state() -> NodeType:
 			&"lateral_speed": snapshot.lateral_speed,
 			&"angular_velocity": snapshot.angular_velocity,
 			&"on_track": 1.0 if snapshot.on_track else 0.0,
+			&"damage": snapshot.damage,
 		}
 
 	return t

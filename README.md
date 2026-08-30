@@ -42,7 +42,10 @@ reintroduce frame-rate dependence; `tests/harness_test.gd` asserts they stay off
 
 ## Brains
 
-A brain is a text file of nodes and wires — see [brains/follower.brain](brains/follower.brain).
+A brain is a text file of nodes and wires. Two reference brains ship as a ladder
+(spec 2.10): [brains/follower.brain](brains/follower.brain) is the naive lap completer,
+[brains/braker.brain](brains/braker.brain) lifts and brakes for corners and beats it on
+both time and damage.
 Nodes are the source of truth (spec 2.3); the format is verbose and hand-editable on
 purpose, and it is the import path for weights trained outside the engine.
 
@@ -56,6 +59,16 @@ the registry, boxes coloured by node role, live validation, and save/load of `.b
 files. It never evaluates anything (spec 3). Hand-written brain files carry no
 positions, so anything at the origin is laid out left to right by how far downstream
 it sits.
+
+**The circuit is a real test.** `Track.grand_prix()` has corners from 16 m to nearly
+straight, and only 11 checkpoints, placed at corner entry / apex / exit and down the
+middle of straights — sparse and irregular on purpose, so they give route and never a
+racing line (spec 2.5). The track is walled: running out of road is a collision that
+costs speed and does lasting damage, not a quiet slide onto grass.
+
+Cornering is grip-limited, so turn radius grows with the *square* of speed. That is
+what makes braking a decision: flat out laps quickly and wrecks the car, cruising is
+clean but slow, and lifting only for corners beats both.
 
 **Test Drive works.** The editor's Test Drive button runs the open brain on the test
 oval in a top-down wireframe: track edges, checkpoints, the car, and its 14 rays drawn

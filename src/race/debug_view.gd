@@ -18,6 +18,7 @@ const CENTRE_LINE := Color(0.35, 0.35, 0.42)
 const CHECKPOINT := Color(0.45, 0.45, 0.55)
 const NEXT_CHECKPOINT := Color(1.0, 0.85, 0.3)
 const CAR_BODY := Color(0.4, 0.85, 1.0)
+const CAR_HURT := Color(1.0, 0.45, 0.4)
 const RAY_CLEAR := Color(0.35, 0.7, 0.45, 0.5)
 const RAY_HIT := Color(1.0, 0.45, 0.4, 0.85)
 
@@ -52,8 +53,8 @@ func _physics_process(_delta: float) -> void:
 		_snapshot = SensorBuilder.build(session.car, session.track)
 		_controls = session.evaluator.tick(_snapshot)
 		session.car.step(_controls, session.track)
-		if not session.track.is_on_track(session.car.position):
-			session.left_track_count += 1
+		if session.car.touching_wall:
+			session.wall_hits += 1
 		session.ticks += 1
 	_update_readout()
 	queue_redraw()
@@ -93,7 +94,9 @@ func _draw_car() -> void:
 	var nose := car.position + car.forward() * 3.0
 	var left := car.position - car.forward() * 1.6 - car.right() * 1.4
 	var right := car.position - car.forward() * 1.6 + car.right() * 1.4
-	draw_colored_polygon(PackedVector2Array([_to_screen(nose), _to_screen(left), _to_screen(right)]), CAR_BODY)
+	# Reddens as it takes damage, so you can see a car limping without reading numbers.
+	var tint := CAR_BODY.lerp(CAR_HURT, car.damage)
+	draw_colored_polygon(PackedVector2Array([_to_screen(nose), _to_screen(left), _to_screen(right)]), tint)
 
 ## The track has width, so its edges are the centre line pushed sideways. Each
 ## point uses the average direction of the two segments meeting there, which
@@ -156,7 +159,7 @@ func _build_controls() -> void:
 		session.car = Car.at_start(session.track)
 		session.evaluator.reset()
 		session.ticks = 0
-		session.left_track_count = 0))
+		session.wall_hits = 0))
 	bar.add_child(_button("1x", func() -> void: steps_per_frame = 1))
 	bar.add_child(_button("5x", func() -> void: steps_per_frame = 5))
 	bar.add_child(_button("20x", func() -> void: steps_per_frame = 20))
@@ -188,8 +191,9 @@ func _update_readout() -> void:
 		"brake    %s  %.2f" % [_bar(_controls.brake), _controls.brake],
 		"drs      %s" % ("on" if _controls.drs else "off"),
 		"",
-		"on track: %s" % ("yes" if _snapshot.on_track else "[color=#ff8f8f]NO[/color]"),
-		"ran wide: %d ticks" % session.left_track_count,
+		"wall: %s" % ("clear" if _snapshot.on_track else "[color=#ff8f8f]SCRAPING[/color]"),
+		"damage %s  %.0f%%" % [_bar(session.car.damage), session.car.damage * 100.0],
+		"contact: %d ticks" % session.wall_hits,
 	])
 
 static func _bar(value: float) -> String:

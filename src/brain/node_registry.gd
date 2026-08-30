@@ -19,6 +19,11 @@ static func create_default() -> NodeRegistry:
 	r.register(ConstantNode.define())
 	r.register(AddNode.define())
 	r.register(MultiplyNode.define())
+	r.register(MathNodes.subtract())
+	r.register(MathNodes.divide())
+	r.register(MathNodes.absolute())
+	r.register(MathNodes.minimum())
+	r.register(MathNodes.maximum())
 	r.register(ThresholdNode.define())
 	r.register(AccumulatorNode.define())
 	return r

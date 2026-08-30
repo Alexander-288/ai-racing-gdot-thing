@@ -4,7 +4,7 @@ extends Node3D
 ## Phase 6, deliberately last, because it is the fun part and would otherwise eat
 ## the time the risky parts need.
 
-const BRAIN_PATH := "res://brains/follower.brain"
+const BRAIN_PATH := "res://brains/braker.brain"
 
 func _ready() -> void:
 	print("Formula AI: Grand Prix — Godot %s" % Engine.get_version_info().string)
@@ -22,11 +22,12 @@ func _ready() -> void:
 			printerr("invalid brain: %s" % problem)
 		return
 
-	var session := RaceSession.create(loaded.graph, registry, Track.oval())
+	var session := RaceSession.create(loaded.graph, registry, Track.grand_prix())
 	var finished := session.run_until_lap(3)
 
 	print('brain "%s"' % loaded.graph.name)
-	print("laps: %d, ticks: %d (%.1fs), ran wide: %d times"
-		% [session.car.lap, session.ticks, session.ticks * Car.TICK, session.left_track_count])
+	print("laps: %d, ticks: %d (%.1fs), wall contact: %d ticks, damage: %.0f%%"
+		% [session.car.lap, session.ticks, session.ticks * Car.TICK, session.wall_hits,
+			session.car.damage * 100.0])
 	if not finished:
 		print("did not finish — it is a naive brain, that is allowed")

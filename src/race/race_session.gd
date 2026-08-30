@@ -9,7 +9,7 @@ var track: Track
 var car: Car
 var evaluator: BrainEvaluator
 var ticks: int = 0
-var left_track_count: int = 0  # how often the car ran wide, i.e. was the lap clean
+var wall_hits: int = 0  # ticks spent against a barrier, i.e. was the lap clean
 
 static func create(graph: BrainGraph, registry: NodeRegistry, track: Track) -> RaceSession:
 	var s := RaceSession.new()
@@ -24,8 +24,8 @@ func tick() -> void:
 	var snapshot := SensorBuilder.build(car, track)
 	var controls := evaluator.tick(snapshot)
 	car.step(controls, track)
-	if not track.is_on_track(car.position):
-		left_track_count += 1
+	if car.touching_wall:
+		wall_hits += 1
 	ticks += 1
 
 ## Runs until the car finishes the given lap, or gives up. Returns whether it

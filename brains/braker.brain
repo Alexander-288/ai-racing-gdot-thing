@@ -1,0 +1,103 @@
+# Reference brain 2 of 3: the competent clean racer.
+#
+# Beats the naive follower on both counts — quicker than flat-out AND finishes
+# undamaged — by doing one thing the follower cannot: lifting and braking for
+# corners, then using the whole straight.
+#
+# Two lessons are baked in here, both learned the hard way:
+#   * Throttle never drops to zero. A stopped car cannot steer, so a brain that
+#     brakes itself to a standstill in a corner is stuck there forever.
+#   * Braking is scaled by how far over the corner speed you actually are.
+#     Braking on corner sharpness alone does the same thing: stops the car.
+
+format 1
+name "Reference: Braker"
+
+# ---- where the route goes ------------------------------------------------
+
+node cp checkpoint
+    index = 0.0
+
+node me self_state
+
+# ---- steering: aim at the next checkpoint --------------------------------
+
+node gain constant
+    value = 2.0
+
+node steer_amount multiply
+
+node steer out_steering
+
+# ---- how sharp is what is coming, ignoring which way it bends ------------
+
+node sharp abs
+
+node limit constant
+    value = 0.3
+
+# 1.0 on a straight, 0.0 in a corner
+node gate threshold
+
+# ---- throttle: full on the straights, a floor everywhere else ------------
+
+node floor constant
+    value = 0.5
+
+node gas_amount max
+
+node gas out_throttle
+
+# ---- brake: only in corners, and only when actually too fast -------------
+
+node one constant
+    value = 1.0
+
+node in_corner subtract
+
+node safe constant
+    value = 20.0
+
+node excess subtract
+
+node zero constant
+    value = 0.0
+
+node too_fast max
+
+node brake_gain constant
+    value = 0.1
+
+node scaled multiply
+
+node brake_amount multiply
+
+node brake out_brake
+
+# ---- wiring --------------------------------------------------------------
+
+wire cp.angle -> steer_amount.a
+wire gain.out -> steer_amount.b
+wire steer_amount.out -> steer.value
+
+wire cp.angle -> sharp.value
+wire limit.out -> gate.value
+wire sharp.out -> gate.target
+
+wire floor.out -> gas_amount.a
+wire gate.out -> gas_amount.b
+wire gas_amount.out -> gas.value
+
+wire one.out -> in_corner.a
+wire gate.out -> in_corner.b
+
+wire me.speed -> excess.a
+wire safe.out -> excess.b
+wire excess.out -> too_fast.a
+wire zero.out -> too_fast.b
+
+wire too_fast.out -> scaled.a
+wire brake_gain.out -> scaled.b
+wire in_corner.out -> brake_amount.a
+wire scaled.out -> brake_amount.b
+wire brake_amount.out -> brake.value

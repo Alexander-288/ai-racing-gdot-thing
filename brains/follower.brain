@@ -19,7 +19,7 @@ node steer out_steering
 
 # Same throttle everywhere. This is the naive part.
 node cruise constant
-    value = 0.55
+    value = 0.42
 
 node gas out_throttle
 

@@ -32,7 +32,10 @@ static func build(car: Car, track: Track) -> SensorSnapshot:
 	s.forward_speed = car.speed  # no sideways slide in the Phase 1 car model
 	s.lateral_speed = 0.0
 	s.angular_velocity = car.angular_velocity
-	s.on_track = track.is_on_track(car.position)
+	# With walls there is no "off track" any more; what a brain needs to know is
+	# whether it is currently scraping one.
+	s.on_track = not car.touching_wall
+	s.damage = car.damage
 	s.lap = car.lap
 
 	for i in CHECKPOINTS_VISIBLE:

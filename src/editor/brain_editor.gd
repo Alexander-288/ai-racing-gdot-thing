@@ -232,7 +232,7 @@ func _on_test_drive() -> void:
 		_revalidate()
 		return  # a brain with problems is not worth watching drive
 
-	var view := DebugView.open(graph, registry, Track.oval())
+	var view := DebugView.open(graph, registry, Track.grand_prix())
 	view.closed.connect(func() -> void:
 		remove_child(view)
 		view.queue_free())
