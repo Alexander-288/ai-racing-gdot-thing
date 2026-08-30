@@ -8,6 +8,8 @@ var display_name: String = ""
 var category: String = ""         # which palette group the editor shows it in
 var budget_class: StringName = &""  # what the validator counts for fairness caps
 
+var config_defaults: Dictionary = {}  # baked-in settings, not wires (e.g. a constant's value)
+
 var inputs: Array[Port] = []
 var outputs: Array[Port] = []
 

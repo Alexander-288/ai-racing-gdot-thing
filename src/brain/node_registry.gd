@@ -9,6 +9,8 @@ var _types: Dictionary = {}  # StringName id -> NodeType
 ## Builds the registry every part of the game uses. Add new node types here.
 static func create_default() -> NodeRegistry:
 	var r := NodeRegistry.new()
+	r.register(ConstantNode.define())
+	r.register(AddNode.define())
 	r.register(ThresholdNode.define())
 	r.register(AccumulatorNode.define())
 	return r
