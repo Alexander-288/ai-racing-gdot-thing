@@ -1,0 +1,13 @@
+format 1
+name "Reference: Counter"
+
+node one constant
+    value = 1.0
+
+node acc accumulator
+
+node sum add
+
+wire one.out -> sum.a
+wire acc.out -> sum.b
+wire sum.out -> acc.add

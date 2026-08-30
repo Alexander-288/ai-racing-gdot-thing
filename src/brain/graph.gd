@@ -16,6 +16,8 @@ class Wire extends RefCounted:
 	var to_node: StringName = &""
 	var to_port: StringName = &""
 
+var name: String = ""  # shown on the leaderboard, not used by the runtime
+
 # Insertion-ordered, which is what keeps evaluation order the same every load.
 var instances: Dictionary = {}
 var wires: Array[Wire] = []

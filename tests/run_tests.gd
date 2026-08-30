@@ -28,6 +28,11 @@ func _init() -> void:
 			var case: TestCase = script.new()
 			case.call(name)
 			total_assertions += case.assertions
+			# A GDScript runtime error does not stop the run — it just logs and
+			# abandons the method. So a test that asserted nothing probably blew up.
+			if case.assertions == 0:
+				failed.append("%s::%s — asserted nothing (did it error out? see above)"
+					% [path.get_file(), name])
 			for failure: String in case.failures:
 				failed.append("%s::%s — %s" % [path.get_file(), name, failure])
 		# Catches the other silent skip: file compiles, but a typo'd method name
