@@ -42,10 +42,19 @@ reintroduce frame-rate dependence; `tests/harness_test.gd` asserts they stay off
 
 ## Brains
 
-A brain is a text file of nodes and wires. Two reference brains ship as a ladder
-(spec 2.10): [brains/follower.brain](brains/follower.brain) is the naive lap completer,
-[brains/braker.brain](brains/braker.brain) lifts and brakes for corners and beats it on
-both time and damage.
+A brain is a text file of nodes and wires. Three reference brains ship as a ladder
+(spec 2.10):
+
+| brain | drives on | unseen tracks |
+| --- | --- | --- |
+| [follower](brains/follower.brain) | the route alone, one fixed throttle | finishes, slowly |
+| [braker](brains/braker.brain) | the route, lifting for corners | quickest on its own circuit, takes damage elsewhere |
+| [racer](brains/racer.brain) | the route **and** its rays | as quick, and never touches a wall |
+
+The braker beats the racer on the circuit it was tuned for and loses to it everywhere
+else. That gap is the whole reason held-out tracks are the scoring mechanism (spec 2.9).
+`Track.generated(seed)` draws from a published distribution, so a track pool can be
+public in shape and secret in seed.
 Nodes are the source of truth (spec 2.3); the format is verbose and hand-editable on
 purpose, and it is the import path for weights trained outside the engine.
 

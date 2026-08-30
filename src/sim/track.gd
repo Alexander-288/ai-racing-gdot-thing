@@ -134,6 +134,42 @@ static func grand_prix() -> Track:
 	t.build_index()
 	return t
 
+## A track from a seed, drawn from the published distribution (spec 2.9): the
+## shape family and the ranges are public, the seeds used on race day are not.
+## This is what makes a held-out track pool possible — and what stops a brain
+## being tuned to one circuit and calling itself general.
+static func generated(seed: int) -> Track:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed  # seeded, so a given track is the same track for everyone
+
+	# Retried rather than clamped: some rolls produce a corner tighter than any
+	# car could take, and a track nobody can drive tests nothing.
+	for attempt in 12:
+		var t := Track.new()
+		t.half_width = rng.randf_range(7.0, 9.5)
+		var sweep := rng.randf_range(14.0, 24.0)
+		var kink := rng.randf_range(6.0, 14.0)
+		var phase := rng.randf_range(0.0, TAU)
+		var squash := rng.randf_range(0.68, 0.95)
+		for i in 180:
+			var angle := TAU * float(i) / 180.0
+			var radius := 76.0 + sweep * sin(angle * 2.0 + phase) + kink * sin(angle * 3.0 + phase * 1.7)
+			t.centre_line.append(Vector2(sin(angle) * radius, cos(angle) * radius * squash))
+		t.checkpoints = t._pick_feature_checkpoints()
+		t.build_index()
+		if t.tightest_corner() >= 14.0 and t.checkpoint_count() >= 6:
+			return t
+	return grand_prix()  # the roll never landed; fall back to the known-good one
+
+## Radius of the tightest corner, in metres. A car can hold a corner of radius r
+## only up to sqrt(MAX_LATERAL * r), so this is the number that says whether a
+## track is drivable at all.
+func tightest_corner() -> float:
+	var tightest := INF
+	for turn: float in _curvature_profile():
+		tightest = minf(tightest, 1.0 / maxf(turn, 0.00001))
+	return tightest
+
 ## Places checkpoints at features, the way the spec describes them: corner entry,
 ## apex and exit, plus once down the middle of a long straight. Spacing comes out
 ## uneven because the track is uneven, which is what stops them adding up to a

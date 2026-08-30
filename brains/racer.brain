@@ -1,0 +1,141 @@
+# Reference brain 3 of 3: the one that uses its eyes.
+#
+# The follower and the braker both drive on the route alone — the direction to
+# the next checkpoint. That works, but it is blind: it knows where the track
+# goes, never where the walls actually are. On a circuit it was tuned for, that
+# is enough. On one it has never seen, it is not.
+#
+# This brain adds the rays:
+#   * steering is the route, plus a push away from whichever wall is nearer
+#     (ray 1 is 45 degrees right, ray 7 is 45 degrees left)
+#   * throttle is capped by how far the road ahead is clear (ray 10)
+#   * it brakes for the worse of two reasons — a corner the route says is
+#     coming, or a wall the rays say is close
+#
+# The second brake reason is the important one. Anticipation alone cannot save
+# a brain on a track whose corners are tighter than the ones it was tuned on;
+# the rays can, because a wall getting close is true everywhere.
+
+format 1
+name "Reference: Racer"
+
+node cp checkpoint
+    index = 0.0
+
+node me self_state
+
+node fwd ray
+    index = 10.0
+
+node left ray
+    index = 7.0
+
+node right ray
+    index = 1.0
+
+node cpg constant
+    value = 1.5
+
+node aim multiply
+
+node lean subtract
+
+node ag constant
+    value = 1.5
+
+node dodge multiply
+
+node steer_sum add
+
+node steer out_steering
+
+node sharp abs
+
+node limit constant
+    value = 0.3
+
+node gate threshold
+
+node gg constant
+    value = 2.5
+
+node open multiply
+
+node gasfloor constant
+    value = 0.5
+
+node gas_amount max
+
+node allowed min
+
+node gas out_throttle
+
+node safe constant
+    value = 26.0
+
+node excess subtract
+
+node zero constant
+    value = 0.0
+
+node too_fast max
+
+node one constant
+    value = 1.0
+
+node in_corner subtract
+
+node bga constant
+    value = 0.12
+
+node plan multiply
+
+node closeness subtract
+
+node bgn constant
+    value = 0.15
+
+node panic multiply
+
+node reason max
+
+node brake_amount multiply
+
+node brake out_brake
+
+wire cp.angle -> aim.a
+wire cpg.out -> aim.b
+wire right.distance -> lean.a
+wire left.distance -> lean.b
+wire lean.out -> dodge.a
+wire ag.out -> dodge.b
+wire aim.out -> steer_sum.a
+wire dodge.out -> steer_sum.b
+wire steer_sum.out -> steer.value
+wire cp.angle -> sharp.value
+wire limit.out -> gate.value
+wire sharp.out -> gate.target
+wire fwd.distance -> open.a
+wire gg.out -> open.b
+wire gasfloor.out -> gas_amount.a
+wire open.out -> allowed.a
+wire gate.out -> allowed.b
+wire allowed.out -> gas_amount.b
+wire gas_amount.out -> gas.value
+wire me.speed -> excess.a
+wire safe.out -> excess.b
+wire excess.out -> too_fast.a
+wire zero.out -> too_fast.b
+wire one.out -> in_corner.a
+wire gate.out -> in_corner.b
+wire in_corner.out -> plan.a
+wire bga.out -> plan.b
+wire one.out -> closeness.a
+wire fwd.distance -> closeness.b
+wire closeness.out -> panic.a
+wire bgn.out -> panic.b
+wire plan.out -> reason.a
+wire panic.out -> reason.b
+wire reason.out -> brake_amount.a
+wire too_fast.out -> brake_amount.b
+wire brake_amount.out -> brake.value

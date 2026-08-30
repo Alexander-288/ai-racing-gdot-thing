@@ -57,3 +57,38 @@ func test_the_braker_beats_flat_out_on_time_as_well() -> void:
 	var braker := _race("res://brains/braker.brain")
 	assert_true(braker.ticks < flat_out.ticks,
 		"thinking must beat flooring it: %d vs %d" % [braker.ticks, flat_out.ticks])
+
+# ------------------------------------------------------------------ generalising
+
+## The whole point of the competition (spec 2.9): brains race on tracks they have
+## never seen. A brain tuned to one circuit should lose to one that reads the road.
+
+func _race_unseen(path: String, seed: int) -> RaceSession:
+	var session := RaceSession.create(_load(path), NodeRegistry.create_default(),
+		Track.generated(seed))
+	session.run_until_lap(1, 5000)
+	return session
+
+func test_generated_tracks_are_drivable_and_repeatable() -> void:
+	for seed in [1, 2, 3]:
+		var a := Track.generated(seed)
+		var b := Track.generated(seed)
+		assert_true(a.tightest_corner() >= 14.0, "seed %d has an untakeable corner" % seed)
+		assert_eq(a.checkpoints, b.checkpoints, "the same seed must give the same track")
+
+func test_the_racer_finishes_every_unseen_track_undamaged() -> void:
+	for seed in [1, 2, 3, 4]:
+		var session := _race_unseen("res://brains/racer.brain", seed)
+		assert_eq(session.car.lap, 1, "did not finish seed %d" % seed)
+		assert_almost_eq(session.car.damage, 0.0, 0.001, "took damage on seed %d" % seed)
+
+func test_reading_the_road_beats_knowing_the_route_on_unseen_tracks() -> void:
+	# The braker is quicker on the circuit it was tuned for, and pays for it here.
+	# That gap is the reason held-out tracks are the scoring mechanism.
+	var braker_damage := 0.0
+	var racer_damage := 0.0
+	for seed in [1, 3, 5]:
+		braker_damage += _race_unseen("res://brains/braker.brain", seed).car.damage
+		racer_damage += _race_unseen("res://brains/racer.brain", seed).car.damage
+	assert_true(racer_damage < braker_damage,
+		"racer %.2f vs braker %.2f damage across unseen tracks" % [racer_damage, braker_damage])
