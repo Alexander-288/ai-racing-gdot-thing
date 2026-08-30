@@ -10,16 +10,22 @@ const CHECKPOINTS_VISIBLE := 4   # how far ahead a brain may look
 ## for now; these become per-brain configuration once the editor exists.
 const AIMED_ANGLES: Array[float] = [-0.35, -0.15, 0.0, 0.15, 0.35, PI]
 
-static func build(car: Car, track: Track) -> SensorSnapshot:
-	var s := SensorSnapshot.new()
-
+## Where every ray points, as angles from straight ahead. One list, used both to
+## cast the rays and to draw them, so the picture can never disagree with what
+## the brain was actually told.
+static func ray_angles() -> Array[float]:
+	var angles: Array[float] = []
 	# The 8-ray ring: fixed, evenly spaced, identical for every car so the
 	# competition measures thinking rather than provisioning (spec 2.5).
 	for i in SensorSnapshot.RING_RAYS:
-		var angle := TAU * float(i) / float(SensorSnapshot.RING_RAYS)
-		_add_ray(s, car, track, angle)
+		angles.append(TAU * float(i) / float(SensorSnapshot.RING_RAYS))
+	angles.append_array(AIMED_ANGLES)
+	return angles
 
-	for angle: float in AIMED_ANGLES:
+static func build(car: Car, track: Track) -> SensorSnapshot:
+	var s := SensorSnapshot.new()
+
+	for angle: float in ray_angles():
 		_add_ray(s, car, track, angle)
 
 	s.speed = car.speed

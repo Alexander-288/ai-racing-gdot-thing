@@ -57,8 +57,16 @@ files. It never evaluates anything (spec 3). Hand-written brain files carry no
 positions, so anything at the origin is laid out left to right by how far downstream
 it sits.
 
-Working: node registry, graph, brain file format, validator, evaluator, sensors and
-control outputs, track, car physics, race session, editor.
+**Test Drive works.** The editor's Test Drive button runs the open brain on the test
+oval in a top-down wireframe: track edges, checkpoints, the car, and its 14 rays drawn
+from the same angle list the sensors use — so the picture cannot disagree with what the
+brain was told. Pause, Step, Reset, and 1x/5x/20x. Speeding up runs more ticks per
+frame, never bigger ticks, so it stays deterministic.
 
-Next: a debug view (top-down wireframe, so you can watch a brain drive), then Phase 2 —
-vector ports, Pack / Unpack, and Dense Layer with weight import.
+The wireframe is an instrument, not the graphical suite. Cel shading, cameras and the
+broadcast overlay are Phase 6; this gets deleted then.
+
+Working: node registry, graph, brain file format, validator, evaluator, sensors and
+control outputs, track, car physics, race session, editor, debug view.
+
+Next: Phase 2 — vector ports, Pack / Unpack, and Dense Layer with weight import.

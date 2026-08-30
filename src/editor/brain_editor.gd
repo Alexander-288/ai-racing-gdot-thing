@@ -46,6 +46,7 @@ func _build_ui() -> void:
 	_build_palette()
 
 	side.add_child(HSeparator.new())
+	side.add_child(_button("Test Drive", _on_test_drive))
 	side.add_child(_button("Save", _on_save))
 	side.add_child(_button("Load", _on_load))
 
@@ -221,6 +222,21 @@ func _revalidate() -> void:
 	for e: String in errors:
 		lines.append("• " + e)
 	_problems.text = "\n".join(lines)
+
+## Build, watch, tweak — the loop this whole project rests on. The editor still
+## does not evaluate anything itself: it hands the graph to a race session and
+## gets out of the way.
+func _on_test_drive() -> void:
+	var errors := BrainValidator.validate(graph, registry)
+	if not errors.is_empty():
+		_revalidate()
+		return  # a brain with problems is not worth watching drive
+
+	var view := DebugView.open(graph, registry, Track.oval())
+	view.closed.connect(func() -> void:
+		remove_child(view)
+		view.queue_free())
+	add_child(view)
 
 # ---------------------------------------------------------------- files
 
