@@ -1,0 +1,29 @@
+# Reference brain 1 of 3: the naive lap completer.
+# Aims at the next checkpoint and holds a steady throttle. No memory, no rays,
+# no idea that corners exist. It is here to be beaten.
+
+format 1
+name "Reference: Checkpoint Follower"
+
+# Where the next bit of route is, relative to the nose of the car.
+node cp checkpoint
+    index = 0.0
+
+# A small angle should still produce real steering, so scale it up.
+node gain constant
+    value = 2.0
+
+node steer_amount multiply
+
+node steer out_steering
+
+# Same throttle everywhere. This is the naive part.
+node cruise constant
+    value = 0.55
+
+node gas out_throttle
+
+wire cp.angle -> steer_amount.a
+wire gain.out -> steer_amount.b
+wire steer_amount.out -> steer.value
+wire cruise.out -> gas.value

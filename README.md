@@ -22,10 +22,10 @@ The test runner exits non-zero on failure, so it drops straight into CI.
 
 ## Layout
 
-    src/brain/    Brain runtime — node registry, graph load/validate/evaluate. No engine deps.
-    src/sim/      Sim core — vehicle physics, track, weather, tyres, damage. Knows nothing about graphs.
-    src/editor/   GraphEdit UI over the node registry. Never evaluates anything.
-    src/race/     Race manager — grid, seed, replays, cameras, telemetry.
+    src/brain/    Brain runtime — node registry, graph, format, validator, evaluator.
+    src/sim/      Sim core — track, car physics, sensor snapshot. Knows nothing about graphs.
+    src/editor/   GraphEdit UI over the node registry. Never evaluates anything. (empty)
+    src/race/     Race session and entry point. Later: grid, seed, replays, cameras.
     scenes/       Godot scenes.
     brains/       Brain files (verbose, hand-editable text format).
     tracks/       Track definitions.
@@ -40,8 +40,19 @@ Non-negotiable from day one (spec §2.4). Fixed 60 Hz physics tick, all AI evalu
 `physics_jitter_fix` and physics interpolation are off in `project.godot` because both
 reintroduce frame-rate dependence; `tests/harness_test.gd` asserts they stay off.
 
+## Brains
+
+A brain is a text file of nodes and wires — see [brains/follower.brain](brains/follower.brain).
+Nodes are the source of truth (spec 2.3); the format is verbose and hand-editable on
+purpose, and it is the import path for weights trained outside the engine.
+
 ## Status
 
-Environment set up. Next: Phase 1 vertical slice — node registry first, then graph
-interpreter, then one car on one short track. Success condition is one hand-built brain
-completing a clean lap.
+**Phase 1 vertical slice: done.** `brains/follower.brain` completes clean laps of the
+test oval, driving only on egocentric senses — no absolute position anywhere.
+
+Working: node registry, graph, brain file format, validator, evaluator, sensors and
+control outputs, track, car physics, race session.
+
+Next: the editor (GraphEdit over the registry), then Phase 2 — vector ports, Pack /
+Unpack, and Dense Layer with weight import.
