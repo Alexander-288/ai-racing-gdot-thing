@@ -1,0 +1,40 @@
+class_name NodeRegistry
+extends RefCounted
+## The list of every node type the game knows about.
+## The editor palette, the serialiser, the validator and the evaluator all read
+## from here, so adding a node type is one file plus one line in create_default().
+
+var _types: Dictionary = {}  # StringName id -> NodeType
+
+## Builds the registry every part of the game uses. Add new node types here.
+static func create_default() -> NodeRegistry:
+	var r := NodeRegistry.new()
+	r.register(ThresholdNode.define())
+	r.register(AccumulatorNode.define())
+	return r
+
+func register(type: NodeType) -> void:
+	# Two node types sharing an id would silently overwrite each other in save files.
+	assert(not _types.has(type.id), "duplicate node type id: %s" % type.id)
+	_types[type.id] = type
+
+func has_type(id: StringName) -> bool:
+	return _types.has(id)
+
+func get_type(id: StringName) -> NodeType:
+	return _types.get(id)
+
+## Every registered type. Built by hand because values() gives an untyped Array.
+func all() -> Array[NodeType]:
+	var out: Array[NodeType] = []
+	for t: NodeType in _types.values():
+		out.append(t)
+	return out
+
+## Used by the editor palette, so its groups can never drift out of sync.
+func by_category(category: String) -> Array[NodeType]:
+	var out: Array[NodeType] = []
+	for t: NodeType in all():
+		if t.category == category:
+			out.append(t)
+	return out

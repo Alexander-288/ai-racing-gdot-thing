@@ -1,0 +1,19 @@
+# Godot 4
+.godot/
+.import/
+export.cfg
+export_presets.cfg
+*.translation
+
+# Mono/.NET
+.mono/
+data_*/
+mono_crash.*.json
+
+# Local editor tooling (Godot binary lives here, not in VCS)
+tools/godot/
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
