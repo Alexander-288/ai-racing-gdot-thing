@@ -7,7 +7,7 @@ static func define() -> NodeType:
 	t.id = &"accumulator"
 	t.display_name = "Accumulator"
 	t.category = "Memory"
-	t.stateful = true
+	t.role = NodeType.Role.MEMORY
 	t.budget_class = &"accumulator"  # capped per brain, so nobody wins on quantity
 
 	t.inputs = [

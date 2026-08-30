@@ -11,14 +11,14 @@ func test_values_flow_along_the_wires() -> void:
 	g.add_node(&"t", &"threshold", {})
 	g.connect_ports(&"c", &"out", &"t", &"value")  # target stays at its default 0.0
 	var e := _eval(g)
-	e.tick()
+	e.tick(SensorSnapshot.blank())
 	assert_almost_eq(e.output_of(&"t", &"out"), 1.0, 1e-6, "5 is above 0")
 
 func test_unwired_input_uses_its_default() -> void:
 	var g := BrainGraph.new()
 	g.add_node(&"sum", &"add")  # nothing connected at all
 	var e := _eval(g)
-	e.tick()
+	e.tick(SensorSnapshot.blank())
 	assert_almost_eq(e.output_of(&"sum", &"out"), 0.0)
 
 func test_output_is_clamped_to_its_declared_range() -> void:
@@ -27,7 +27,7 @@ func test_output_is_clamped_to_its_declared_range() -> void:
 	g.add_node(&"t", &"threshold")
 	g.connect_ports(&"c", &"out", &"t", &"value")
 	var e := _eval(g)
-	e.tick()
+	e.tick(SensorSnapshot.blank())
 	assert_almost_eq(e.output_of(&"t", &"out"), 1.0, 1e-6, "threshold declares 0..1")
 
 func test_loop_through_memory_counts_up_one_per_tick() -> void:
@@ -40,11 +40,11 @@ func test_loop_through_memory_counts_up_one_per_tick() -> void:
 	g.connect_ports(&"sum", &"out", &"acc", &"add")
 	var e := _eval(g)
 
-	e.tick()
+	e.tick(SensorSnapshot.blank())
 	assert_almost_eq(e.output_of(&"acc", &"out"), 0.0, 1e-6, "tick 1 still reports the start value")
-	e.tick()
+	e.tick(SensorSnapshot.blank())
 	assert_almost_eq(e.output_of(&"acc", &"out"), 1.0, 1e-6)
-	e.tick()
+	e.tick(SensorSnapshot.blank())
 	assert_almost_eq(e.output_of(&"acc", &"out"), 2.0, 1e-6)
 
 func test_reset_wipes_memory_so_brains_spawn_clean() -> void:
@@ -53,12 +53,12 @@ func test_reset_wipes_memory_so_brains_spawn_clean() -> void:
 	g.add_node(&"one", &"constant", { &"value": 1.0 })
 	g.connect_ports(&"one", &"out", &"acc", &"add")
 	var e := _eval(g)
-	e.tick()
-	e.tick()
-	e.tick()
+	e.tick(SensorSnapshot.blank())
+	e.tick(SensorSnapshot.blank())
+	e.tick(SensorSnapshot.blank())
 	assert_almost_eq(e.output_of(&"acc", &"out"), 2.0, 1e-6)
 	e.reset()
-	e.tick()
+	e.tick(SensorSnapshot.blank())
 	assert_almost_eq(e.output_of(&"acc", &"out"), 0.0, 1e-6, "no map survives across races")
 
 func test_same_inputs_give_the_same_trace_twice() -> void:
@@ -78,6 +78,6 @@ func _run_trace() -> Array[float]:
 	var e := _eval(g)
 	var trace: Array[float] = []
 	for i in 20:
-		e.tick()
+		e.tick(SensorSnapshot.blank())
 		trace.append(e.output_of(&"acc", &"out"))
 	return trace

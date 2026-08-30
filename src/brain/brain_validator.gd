@@ -15,20 +15,20 @@ static func validate(graph: BrainGraph, registry: NodeRegistry) -> PackedStringA
 
 	# Only worth sorting once the wires are known to point at real sockets.
 	if errors.is_empty():
-		var order := sort_pure_nodes(graph, registry)
-		if order.size() != _pure_ids(graph, registry).size():
+		var order := sort_nodes(graph, registry)
+		if order.size() != _sortable_ids(graph, registry).size():
 			errors.append("graph contains a cycle that does not pass through a memory node")
 
 	return errors
 
-## Evaluation order for the pure nodes. Empty-ish result means a cycle (see validate).
+## Evaluation order for everything that is not a source. A short result means a cycle.
 ##
-## The trick: a stateful node's output is already known before the tick starts, so
-## wires leaving one impose no ordering, and wires entering one are not followed at
-## all. Cut those and a legal loop stops being a loop. Anything still circular is
-## the error the editor highlights.
-static func sort_pure_nodes(graph: BrainGraph, registry: NodeRegistry) -> Array[StringName]:
-	var pure := _pure_ids(graph, registry)
+## The trick: a source (a sensor, or a memory node) already has its numbers before
+## the tick starts, so wires leaving one impose no ordering and wires entering one
+## are not followed at all. Cut those and a legal loop stops being a loop. Anything
+## still circular is what the editor highlights (spec 2.7).
+static func sort_nodes(graph: BrainGraph, registry: NodeRegistry) -> Array[StringName]:
+	var pure := _sortable_ids(graph, registry)
 
 	var waiting_on: Dictionary = {}  # node id -> how many inputs are not ready yet
 	var feeds: Dictionary = {}       # node id -> the nodes downstream of it
@@ -37,7 +37,7 @@ static func sort_pure_nodes(graph: BrainGraph, registry: NodeRegistry) -> Array[
 		feeds[id] = [] as Array[StringName]
 
 	for w: BrainGraph.Wire in graph.wires:
-		# Skip unless both ends are pure — that is the cut described above.
+		# Skip unless both ends need sorting — that is the cut described above.
 		if not waiting_on.has(w.from_node) or not waiting_on.has(w.to_node):
 			continue
 		feeds[w.from_node].append(w.to_node)
@@ -60,11 +60,11 @@ static func sort_pure_nodes(graph: BrainGraph, registry: NodeRegistry) -> Array[
 	# Nodes left waiting are in a cycle, so they never became ready.
 	return order
 
-static func _pure_ids(graph: BrainGraph, registry: NodeRegistry) -> Array[StringName]:
+static func _sortable_ids(graph: BrainGraph, registry: NodeRegistry) -> Array[StringName]:
 	var out: Array[StringName] = []
 	for inst: BrainGraph.Instance in graph.instances.values():
 		var t := registry.get_type(inst.type_id)
-		if t != null and not t.stateful:
+		if t != null and not t.is_source():
 			out.append(inst.id)
 	return out
 
@@ -90,7 +90,7 @@ static func _check_wire(w: BrainGraph.Wire, graph: BrainGraph, registry: NodeReg
 		errors.append("%s: '%s' has no output called '%s'" % [label, w.from_node, w.from_port])
 	if to_port == null:
 		errors.append("%s: '%s' has no input called '%s'" % [label, w.to_node, w.to_port])
-	elif from_port != null and from_port.kind != to_port.kind:
+	elif from_port != null and not _kinds_fit(from_port.kind, to_port.kind):
 		errors.append("%s: cannot wire %s into %s" % [label, Port.Kind.keys()[from_port.kind], Port.Kind.keys()[to_port.kind]])
 
 	return errors
@@ -100,3 +100,11 @@ static func _find_port(ports: Array[Port], id: StringName) -> Port:
 		if p.id == id:
 			return p
 	return null
+
+## A bool is allowed into a float socket, because 0.0 / 1.0 is a fine number to
+## multiply by — that is how a brain gates one value with another. The reverse is
+## refused: an arbitrary float is not a yes-or-no answer.
+static func _kinds_fit(from_kind: Port.Kind, to_kind: Port.Kind) -> bool:
+	if from_kind == to_kind:
+		return true
+	return from_kind == Port.Kind.BOOL and to_kind == Port.Kind.FLOAT

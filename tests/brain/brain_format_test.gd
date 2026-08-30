@@ -78,7 +78,7 @@ func test_parsed_brain_actually_runs() -> void:
 	var text := BrainFormat.serialize(_counter_graph())
 	var graph := BrainFormat.parse(text).graph
 	var e := BrainEvaluator.create(graph, NodeRegistry.create_default())
-	e.tick()
-	e.tick()
-	e.tick()
+	e.tick(SensorSnapshot.blank())
+	e.tick(SensorSnapshot.blank())
+	e.tick(SensorSnapshot.blank())
 	assert_almost_eq(e.output_of(&"acc", &"out"), 2.0, 1e-6)

@@ -5,8 +5,9 @@ extends RefCounted
 
 var _graph: BrainGraph
 var _registry: NodeRegistry
-var _order: Array[StringName] = []      # pure nodes, in dependency order
-var _stateful_ids: Array[StringName] = []
+var _order: Array[StringName] = []      # everything that is not a source, in dependency order
+var _sensor_ids: Array[StringName] = []
+var _memory_ids: Array[StringName] = []
 var _incoming: Dictionary = {}          # node id -> the wires feeding it
 var _state: Dictionary = {}             # node id -> that node's memory
 var _outputs: Dictionary = {}           # node id -> its outputs this tick
@@ -16,12 +17,16 @@ static func create(graph: BrainGraph, registry: NodeRegistry) -> BrainEvaluator:
 	var e := BrainEvaluator.new()
 	e._graph = graph
 	e._registry = registry
-	e._order = BrainValidator.sort_pure_nodes(graph, registry)
+	e._order = BrainValidator.sort_nodes(graph, registry)
 
 	for inst: BrainGraph.Instance in graph.instances.values():
 		var t := registry.get_type(inst.type_id)
-		if t != null and t.stateful:
-			e._stateful_ids.append(inst.id)
+		if t == null:
+			continue
+		if t.role == NodeType.Role.SENSOR:
+			e._sensor_ids.append(inst.id)
+		elif t.role == NodeType.Role.MEMORY:
+			e._memory_ids.append(inst.id)
 
 	for w: BrainGraph.Wire in graph.wires:
 		if not e._incoming.has(w.to_node):
@@ -31,30 +36,44 @@ static func create(graph: BrainGraph, registry: NodeRegistry) -> BrainEvaluator:
 	e.reset()
 	return e
 
-## Clears all memory. Brains spawn clean every race, so nothing carries over.
+## Clears all memory. Brains spawn clean every race, so no map of a track can be
+## built up across runs (spec 2.5).
 func reset() -> void:
 	_state.clear()
 	_outputs.clear()
-	for id: StringName in _stateful_ids:
+	for id: StringName in _memory_ids:
 		_state[id] = _type_of(id).init_state.call()
 
-## One physics tick. The order of these three steps is the determinism lock.
-func tick() -> void:
-	# 1. Memory nodes report last tick's numbers. Nothing is wired yet, so this is
-	#    what lets a loop resolve: their outputs exist before evaluation starts.
-	for id: StringName in _stateful_ids:
+## One physics tick: senses in, controls out. The order of these four steps never
+## changes, for any car, on any tick — that is the determinism lock (spec 3.2).
+func tick(snapshot: SensorSnapshot) -> CarControls:
+	var controls := CarControls.new()
+
+	# 1. Senses. Fixed numbers for this tick, before any maths happens.
+	for id: StringName in _sensor_ids:
+		var t := _type_of(id)
+		_outputs[id] = _clean(t, t.sense.call(snapshot, _config_of(id)))
+
+	# 2. Memory reports LAST tick's numbers. Together with step 1 this means every
+	#    source is known up front, which is what lets a loop resolve.
+	for id: StringName in _memory_ids:
 		var t := _type_of(id)
 		_outputs[id] = _clean(t, t.emit.call(_state[id], _config_of(id)))
 
-	# 2. Every pure node, once each, in dependency order.
+	# 3. Everything else, once each, in dependency order.
 	for id: StringName in _order:
 		var t := _type_of(id)
-		_outputs[id] = _clean(t, t.eval.call(_gather(id), _config_of(id)))
+		if t.role == NodeType.Role.OUTPUT:
+			t.write.call(_gather(id), _config_of(id), controls)
+		else:
+			_outputs[id] = _clean(t, t.eval.call(_gather(id), _config_of(id)))
 
-	# 3. Memory nodes swallow this tick's inputs, ready for the next one.
-	for id: StringName in _stateful_ids:
+	# 4. Memory swallows this tick's inputs, ready for the next one.
+	for id: StringName in _memory_ids:
 		var t := _type_of(id)
 		t.commit.call(_gather(id), _config_of(id), _state[id])
+
+	return controls
 
 func output_of(node_id: StringName, port_id: StringName) -> float:
 	var node_outputs: Dictionary = _outputs.get(node_id, {})
@@ -71,7 +90,7 @@ func _gather(node_id: StringName) -> Dictionary:
 	return inp
 
 ## Forces every output into its declared range, and NaN to zero. A broken brain
-## drives badly; it does not get to take the race down with it.
+## drives badly; it does not get to take the race down with it (spec 3.3).
 func _clean(type: NodeType, raw: Dictionary) -> Dictionary:
 	var out: Dictionary = {}
 	for p: Port in type.outputs:

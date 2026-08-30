@@ -50,5 +50,5 @@ func test_sort_puts_producers_before_consumers() -> void:
 	g.add_node(&"t", &"threshold")  # added first, but depends on the constant
 	g.add_node(&"c", &"constant")
 	g.connect_ports(&"c", &"out", &"t", &"value")
-	var order := BrainValidator.sort_pure_nodes(g, _registry())
+	var order := BrainValidator.sort_nodes(g, _registry())
 	assert_eq(order, [&"c", &"t"] as Array[StringName])
