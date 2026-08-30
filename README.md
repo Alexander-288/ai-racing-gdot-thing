@@ -15,7 +15,7 @@ To recreate it, unzip the official `Godot_v4.7.2-stable_win64.zip` into that dir
 | --- | --- |
 | Open the editor | `$GODOT -e` |
 | Import assets (first checkout / CI) | `$GODOT --headless --import` |
-| Run the game | `$GODOT` |
+| Open the brain editor (the main scene) | `$GODOT` |
 | Run the test suite | `$GODOT --headless --script res://tests/run_tests.gd` |
 
 The test runner exits non-zero on failure, so it drops straight into CI.
@@ -51,8 +51,14 @@ purpose, and it is the import path for weights trained outside the engine.
 **Phase 1 vertical slice: done.** `brains/follower.brain` completes clean laps of the
 test oval, driving only on egocentric senses — no absolute position anywhere.
 
-Working: node registry, graph, brain file format, validator, evaluator, sensors and
-control outputs, track, car physics, race session.
+**The editor runs.** It is the main scene, so `$GODOT` opens it: a palette built from
+the registry, boxes coloured by node role, live validation, and save/load of `.brain`
+files. It never evaluates anything (spec 3). Hand-written brain files carry no
+positions, so anything at the origin is laid out left to right by how far downstream
+it sits.
 
-Next: the editor (GraphEdit over the registry), then Phase 2 — vector ports, Pack /
-Unpack, and Dense Layer with weight import.
+Working: node registry, graph, brain file format, validator, evaluator, sensors and
+control outputs, track, car physics, race session, editor.
+
+Next: a debug view (top-down wireframe, so you can watch a brain drive), then Phase 2 —
+vector ports, Pack / Unpack, and Dense Layer with weight import.

@@ -82,3 +82,18 @@ func test_parsed_brain_actually_runs() -> void:
 	e.tick(SensorSnapshot.blank())
 	e.tick(SensorSnapshot.blank())
 	assert_almost_eq(e.output_of(&"acc", &"out"), 2.0, 1e-6)
+
+func test_canvas_positions_survive_a_save() -> void:
+	# Layout is not part of the brain's behaviour, but losing it every reload
+	# would make the editor useless.
+	var g := BrainGraph.new()
+	g.add_node(&"c", &"constant", { &"value": 1.0 }, Vector2(120.0, -40.5))
+	var back := BrainFormat.parse(BrainFormat.serialize(g))
+	assert_true(back.ok(), "  ".join(back.errors))
+	assert_almost_eq(back.graph.instances[&"c"].position.x, 120.0)
+	assert_almost_eq(back.graph.instances[&"c"].position.y, -40.5)
+
+func test_an_old_file_without_positions_still_loads() -> void:
+	var result := BrainFormat.parse("format 1\nnode c constant\n    value = 1.0\n")
+	assert_true(result.ok(), "  ".join(result.errors))
+	assert_eq(result.graph.instances[&"c"].position, Vector2.ZERO)

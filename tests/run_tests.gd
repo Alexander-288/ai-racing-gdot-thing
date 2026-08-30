@@ -3,7 +3,19 @@ extends SceneTree
 ##   tools/godot/Godot_v4.7.2-stable_win64_console.exe --headless --script res://tests/run_tests.gd
 ## Discovers every res://tests/**/*_test.gd, runs each `test_*` method, exits non-zero on failure.
 
-func _init() -> void:
+var _already_ran := false
+
+# Tests run on the first frame, not in _init or _initialize. Before the tree is
+# running, add_child does not actually put a node in it, so _ready never fires
+# and any test that builds UI sees half-constructed objects.
+func _process(_delta: float) -> bool:
+	if _already_ran:
+		return true
+	_already_ran = true
+	_run_all()
+	return true
+
+func _run_all() -> void:
 	var files: PackedStringArray = _discover("res://tests")
 	files.sort()
 

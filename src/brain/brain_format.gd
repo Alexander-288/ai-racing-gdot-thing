@@ -36,6 +36,9 @@ static func serialize(graph: BrainGraph) -> String:
 
 	for inst: BrainGraph.Instance in graph.instances.values():
 		out.append("node %s %s" % [inst.id, inst.type_id])
+		# Where it sits on the canvas. Layout only — the runtime ignores it.
+		if inst.position != Vector2.ZERO:
+			out.append("    at %s %s" % [_write_float(inst.position.x), _write_float(inst.position.y)])
 		# Sorted so the same graph always writes byte-identical text.
 		var keys: Array = inst.config.keys()
 		keys.sort()
@@ -141,6 +144,16 @@ static func _read_wire(line: String, line_no: int, result: ParseResult) -> void:
 	result.graph.connect_ports(StringName(from[0]), StringName(from[1]), StringName(to[0]), StringName(to[1]))
 
 static func _read_config(line: String, node: BrainGraph.Instance, line_no: int, result: ParseResult) -> void:
+	# "at x y" is editor layout rather than a setting, so it is read separately.
+	if line.begins_with("at "):
+		var coords := line.substr(3).split(" ", false)
+		if coords.size() != 2:
+			result.errors.append("line %d: expected 'at <x> <y>'" % line_no)
+		else:
+			node.position = Vector2(_read_float(coords[0], line_no, result),
+				_read_float(coords[1], line_no, result))
+		return
+
 	var split_at := line.find("=")
 	if split_at == -1:
 		result.errors.append("line %d: expected 'setting = value'" % line_no)

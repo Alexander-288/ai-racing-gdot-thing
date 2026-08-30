@@ -12,9 +12,14 @@ config_version=5
 
 config/name="Formula AI: Grand Prix"
 config/description="AI racing competition. Developers build car brains as node graphs."
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/editor.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
+
+[display]
+
+window/size/viewport_width=1400
+window/size/viewport_height=860
 
 [debug]
 
