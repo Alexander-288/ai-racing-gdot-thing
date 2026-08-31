@@ -46,8 +46,9 @@ func test_lists_of_weights_survive() -> void:
 	assert_eq(back.graph.instances[&"layer"].config[&"weights"], [0.5, -0.25, 1.0 / 3.0] as Array[float])
 
 func test_a_parsed_graph_still_has_to_pass_validation() -> void:
-	# Parsing only checks the text is well formed; 'dense' is not a real type yet.
-	var text := "format 1\nname \"Bad\"\n\nnode layer dense\n"
+	# Parsing only checks the text is well formed; whether the type exists is a
+	# separate question, answered by the validator.
+	var text := "format 1\nname \"Bad\"\n\nnode boom rocket_launcher\n"
 	var result := BrainFormat.parse(text)
 	assert_true(result.ok(), "text itself is fine")
 	var errors := BrainValidator.validate(result.graph, NodeRegistry.create_default())

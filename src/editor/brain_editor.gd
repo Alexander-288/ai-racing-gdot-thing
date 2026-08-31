@@ -67,8 +67,22 @@ func _build_ui() -> void:
 	_canvas.end_node_move.connect(_on_moved)
 	right.add_child(_canvas)
 
+## Preferred reading order first, then anything else the registry knows about.
+## The second half is what stops a new category quietly vanishing from the palette.
+const CATEGORY_ORDER := ["Sensors", "Math", "Bundles", "Memory", "Outputs"]
+
+func _palette_categories() -> Array[String]:
+	var ordered: Array[String] = []
+	for wanted: String in CATEGORY_ORDER:
+		if registry.categories().has(wanted):
+			ordered.append(wanted)
+	for extra: String in registry.categories():
+		if not ordered.has(extra):
+			ordered.append(extra)
+	return ordered
+
 func _build_palette() -> void:
-	for category: String in ["Sensors", "Math", "Memory", "Outputs"]:
+	for category: String in _palette_categories():
 		var types := registry.by_category(category)
 		if types.is_empty():
 			continue

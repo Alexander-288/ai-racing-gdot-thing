@@ -16,6 +16,10 @@ var id: StringName = &""          # stable key used in save files
 var display_name: String = ""
 var category: String = ""         # which palette group the editor shows it in
 var budget_class: StringName = &""  # what the validator counts for fairness caps
+
+## How much of that budget one of these costs. A Dense Layer costs its neuron
+## count; everything else costs one. Set by node types that need it.
+var budget_cost: Callable = Callable()
 var role: Role = Role.PURE
 
 var config_defaults: Dictionary = {}  # baked-in settings, not wires (e.g. a constant's value)

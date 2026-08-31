@@ -30,6 +30,34 @@ static func ray() -> NodeType:
 
 	return t
 
+## The whole eight-ray ring as two bundles instead of eight separate Ray nodes
+## and the wires to go with them (spec 2.8). Same numbers, one wire.
+##
+## This is the node that makes bundles worth having: it is also exactly the shape
+## a Dense Layer wants as its input.
+static func ray_ring() -> NodeType:
+	var t := NodeType.new()
+	t.id = &"ray_ring"
+	t.display_name = "Ray Ring"
+	t.category = "Sensors"
+	t.role = NodeType.Role.SENSOR
+
+	t.outputs = [
+		Port.make_vector_output(&"distances", "Distances", 0.0, 1.0),
+		Port.make_vector_output(&"hits", "Hit Track", 0.0, 1.0),
+	]
+
+	t.sense = func(snapshot: SensorSnapshot, _cfg: Dictionary) -> Dictionary:
+		var distances: Array[float] = []
+		var hits: Array[float] = []
+		for i in SensorSnapshot.RING_RAYS:
+			var r := snapshot.ray_at(i)
+			distances.append(r[&"distance"])
+			hits.append(1.0 if r[&"hit_track"] else 0.0)
+		return { &"distances": distances, &"hits": hits }
+
+	return t
+
 ## How the car is currently moving. One box, because these are always wanted together.
 static func self_state() -> NodeType:
 	var t := NodeType.new()

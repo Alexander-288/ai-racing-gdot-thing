@@ -10,6 +10,7 @@ var _types: Dictionary = {}  # StringName id -> NodeType
 static func create_default() -> NodeRegistry:
 	var r := NodeRegistry.new()
 	r.register(SensorNodes.ray())
+	r.register(SensorNodes.ray_ring())
 	r.register(SensorNodes.self_state())
 	r.register(SensorNodes.checkpoint())
 	r.register(ControlNodes.steering())
@@ -24,6 +25,9 @@ static func create_default() -> NodeRegistry:
 	r.register(MathNodes.absolute())
 	r.register(MathNodes.minimum())
 	r.register(MathNodes.maximum())
+	r.register(BundleNodes.pack())
+	r.register(BundleNodes.unpack())
+	r.register(DenseLayerNode.define())
 	r.register(ThresholdNode.define())
 	r.register(AccumulatorNode.define())
 	return r
@@ -44,6 +48,16 @@ func all() -> Array[NodeType]:
 	var out: Array[NodeType] = []
 	for t: NodeType in _types.values():
 		out.append(t)
+	return out
+
+## Every category that has node types in it, in registration order. The editor
+## reads this rather than keeping its own list, so a new category cannot go
+## missing from the palette.
+func categories() -> Array[String]:
+	var out: Array[String] = []
+	for t: NodeType in all():
+		if not out.has(t.category):
+			out.append(t.category)
 	return out
 
 ## Used by the editor palette, so its groups can never drift out of sync.

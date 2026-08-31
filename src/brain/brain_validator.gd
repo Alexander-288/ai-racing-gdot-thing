@@ -13,6 +13,9 @@ static func validate(graph: BrainGraph, registry: NodeRegistry) -> PackedStringA
 	for w: BrainGraph.Wire in graph.wires:
 		errors.append_array(_check_wire(w, graph, registry))
 
+	errors.append_array(_check_layers(graph, registry))
+	errors.append_array(_check_budgets(graph, registry))
+
 	# Only worth sorting once the wires are known to point at real sockets.
 	if errors.is_empty():
 		var order := sort_nodes(graph, registry)
@@ -59,6 +62,60 @@ static func sort_nodes(graph: BrainGraph, registry: NodeRegistry) -> Array[Strin
 
 	# Nodes left waiting are in a cycle, so they never became ready.
 	return order
+
+## Fairness caps (spec 2.6, 2.8). The numbers are tuning knobs the spec leaves
+## open; what matters is that the check exists and runs before a race, so nobody
+## wins by bringing more of something rather than by thinking better.
+const BUDGETS := {
+	&"accumulator": 8,
+	&"neuron": 64,
+}
+
+static func _check_budgets(graph: BrainGraph, registry: NodeRegistry) -> PackedStringArray:
+	var errors := PackedStringArray()
+	var spent: Dictionary = {}
+
+	for inst: BrainGraph.Instance in graph.instances.values():
+		var type := registry.get_type(inst.type_id)
+		if type == null or type.budget_class == &"":
+			continue
+		var cost := 1
+		if type.budget_cost.is_valid():
+			cost = int(type.budget_cost.call(_merged_config(type, inst)))
+		spent[type.budget_class] = int(spent.get(type.budget_class, 0)) + cost
+
+	for kind: StringName in spent:
+		var cap: int = BUDGETS.get(kind, 0)
+		if int(spent[kind]) > cap:
+			errors.append("brain uses %d %s, the limit is %d" % [spent[kind], kind, cap])
+	return errors
+
+## A layer whose weight matrix is the wrong size loads silently and then drives
+## on whatever happened to be there. Caught here instead, on ingest, with the
+## shape it expected — because these numbers are imported from outside the engine
+## and getting the shape wrong is the obvious way to get it wrong (spec 2.8).
+static func _check_layers(graph: BrainGraph, registry: NodeRegistry) -> PackedStringArray:
+	var errors := PackedStringArray()
+	for inst: BrainGraph.Instance in graph.instances.values():
+		var type := registry.get_type(inst.type_id)
+		if type == null or type.id != &"dense":
+			continue
+		var cfg := _merged_config(type, inst)
+		var weights: Array = cfg.get(&"weights", [])
+		var biases: Array = cfg.get(&"biases", [])
+		var want_weights := DenseLayerNode.expected_weights(cfg)
+		var want_biases := DenseLayerNode.expected_biases(cfg)
+		if weights.size() != want_weights:
+			errors.append("layer '%s': %d weights for a %s x %s layer, expected %d"
+				% [inst.id, weights.size(), cfg.get(&"inputs", 0), cfg.get(&"outputs", 0), want_weights])
+		if biases.size() != want_biases:
+			errors.append("layer '%s': %d biases, expected %d" % [inst.id, biases.size(), want_biases])
+	return errors
+
+static func _merged_config(type: NodeType, inst: BrainGraph.Instance) -> Dictionary:
+	var merged: Dictionary = type.config_defaults.duplicate()
+	merged.merge(inst.config, true)
+	return merged
 
 static func _sortable_ids(graph: BrainGraph, registry: NodeRegistry) -> Array[StringName]:
 	var out: Array[StringName] = []

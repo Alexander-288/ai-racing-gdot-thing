@@ -2,7 +2,12 @@ class_name Port
 extends RefCounted
 ## One socket on a node — either an input or an output.
 
-enum Kind { FLOAT, BOOL, VECTOR }  # VECTOR is unused until Phase 2 (Dense Layer)
+enum Kind { FLOAT, BOOL, VECTOR }
+
+## How many numbers a bundle carries. Fixed, so a wire's width is never in doubt
+## and no node has to grow or shrink its sockets. Eight because that is the ray
+## ring, which is the reason bundles exist at all (spec 2.8).
+const VECTOR_WIDTH := 8
 
 var id: StringName = &""           # stable key; goes in the save file, never rename
 var display_name: String = ""      # shown in the editor, safe to rename
@@ -20,6 +25,15 @@ static func make_input(p_id: StringName, p_name: String, p_default: Variant, p_k
 	p.default_value = p_default
 	p.kind = p_kind
 	return p
+
+## A bundle coming in. Defaults to empty, which the receiver reads as all zeros —
+## the same promise as any other unwired input, just wider.
+static func make_vector_input(p_id: StringName, p_name: String) -> Port:
+	return make_input(p_id, p_name, [] as Array[float], Kind.VECTOR)
+
+static func make_vector_output(p_id: StringName, p_name: String,
+		p_min: float = -INF, p_max: float = INF) -> Port:
+	return make_output(p_id, p_name, p_min, p_max, Kind.VECTOR)
 
 ## Makes an output port. min/max are the range the evaluator clamps results into.
 static func make_output(p_id: StringName, p_name: String, p_min: float = -INF, p_max: float = INF, p_kind: Kind = Kind.FLOAT) -> Port:

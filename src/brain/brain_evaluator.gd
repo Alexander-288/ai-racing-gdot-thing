@@ -94,11 +94,26 @@ func _gather(node_id: StringName) -> Dictionary:
 func _clean(type: NodeType, raw: Dictionary) -> Dictionary:
 	var out: Dictionary = {}
 	for p: Port in type.outputs:
-		var v: float = float(raw.get(p.id, 0.0))
-		if is_nan(v):
-			v = 0.0
-		out[p.id] = clampf(v, p.min_value, p.max_value)
+		if p.kind == Port.Kind.VECTOR:
+			out[p.id] = _clean_vector(raw.get(p.id, []), p)
+		else:
+			out[p.id] = _clean_number(raw.get(p.id, 0.0), p)
 	return out
+
+static func _clean_number(raw: Variant, p: Port) -> float:
+	var v := float(raw)
+	if is_nan(v):
+		v = 0.0
+	return clampf(v, p.min_value, p.max_value)
+
+## Bundles get the same treatment, element by element. A node that returns the
+## wrong sort of thing entirely gets an empty bundle rather than a crash.
+static func _clean_vector(raw: Variant, p: Port) -> Array[float]:
+	var values: Array[float] = []
+	if raw is Array:
+		for item: Variant in raw:
+			values.append(_clean_number(item, p))
+	return values
 
 func _type_of(node_id: StringName) -> NodeType:
 	return _registry.get_type(_graph.instances[node_id].type_id)

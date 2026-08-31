@@ -91,4 +91,16 @@ broadcast overlay are Phase 6; this gets deleted then.
 Working: node registry, graph, brain file format, validator, evaluator, sensors and
 control outputs, track, car physics, race session, editor, debug view.
 
-Next: Phase 2 — vector ports, Pack / Unpack, and Dense Layer with weight import.
+**Phase 2 done.** Ports carry bundles as well as numbers: `Pack` / `Unpack` move
+between the two, `Ray Ring` gives the whole eight-ray ring on one wire, and
+`Dense Layer` is a whole network layer in one node — an N x M matrix, M biases and
+a choice of tanh / relu / sigmoid, evaluated once per tick like everything else.
+
+The engine only runs networks forwards. Weights are trained outside by whatever
+means and imported through the brain file, which is why that format stays readable
+and exact. A mis-shaped matrix is rejected on load, not discovered on track.
+
+Fairness budgets are enforced: 64 neurons and 8 accumulators per brain. Both are
+tuning knobs (spec 5); what matters is that the check runs before a race.
+
+Next: Phase 3 — slipstream, DRS, weather, tyre wear, and car-to-car contact.
