@@ -11,7 +11,7 @@ func _close(editor: BrainEditor) -> void:
 	Engine.get_main_loop().root.remove_child(editor)
 	editor.free()
 
-func _canvas(editor: BrainEditor) -> GraphEdit:
+func _canvas(editor: BrainEditor) -> BrainCanvas:
 	return editor._canvas
 
 func _views(editor: BrainEditor) -> Array:
@@ -303,4 +303,143 @@ func test_every_tray_keeps_its_own_order_when_sunk() -> void:
 	var children := canvas.get_children()
 	assert_eq(children.find(editor._trays[&"first"]), 0)
 	assert_eq(children.find(editor._trays[&"second"]), 1)
+	_close(editor)
+
+# ------------------------------------------------------------------ harnesses
+
+## A bundle is one wire carrying eight numbers. It is drawn as three strands so
+## it reads as a loom rather than a single core — but it is still one connection.
+func _line_from(editor: BrainEditor, node_id: StringName, slot: int) -> PackedVector2Array:
+	var view: NodeView = editor._views[node_id]
+	var port := view.position_offset + view.get_output_port_position(slot)
+	return _canvas(editor)._get_connection_line(port, port + Vector2(300, 80))
+
+func test_a_bundle_wire_is_drawn_as_a_harness() -> void:
+	var editor := _open()
+	editor.graph.add_node(&"ring", &"ray_ring")   # its outputs are bundles
+	editor.graph.add_node(&"k", &"constant")      # its output is one number
+	editor._rebuild_canvas()
+
+	var plain := _line_from(editor, &"k", 0)
+	var bundle := _line_from(editor, &"ring", 0)
+
+	assert_eq(plain.size(), BrainCanvas.SAMPLES, "a plain wire is one strand")
+	assert_eq(bundle.size(), BrainCanvas.SAMPLES * BrainCanvas.STRANDS,
+		"a bundle is a harness of strands")
+	_close(editor)
+
+func test_a_harness_starts_and_ends_where_the_wire_does() -> void:
+	# The strands are offset sideways, so the harness must still begin and end
+	# close enough to the sockets that it does not look unplugged.
+	var editor := _open()
+	editor.graph.add_node(&"ring", &"ray_ring")
+	editor._rebuild_canvas()
+
+	var view: NodeView = editor._views[&"ring"]
+	var from := view.position_offset + view.get_output_port_position(0)
+	var to := from + Vector2(300, 80)
+	var harness := _canvas(editor)._get_connection_line(from, to)
+
+	assert_true(harness[0].distance_to(from) <= BrainCanvas.STRAND_GAP * 2.0)
+	assert_true(harness[harness.size() - 1].distance_to(to) <= BrainCanvas.STRAND_GAP * 2.0)
+	_close(editor)
+
+func test_a_harness_survives_zooming() -> void:
+	# GraphEdit hands out port positions already multiplied by the zoom, while a
+	# node reports its own unscaled. Miss that conversion and every bundle
+	# quietly goes back to being a single line the moment you zoom.
+	var editor := _open()
+	editor.graph.add_node(&"ring", &"ray_ring")
+	editor._rebuild_canvas()
+
+	var canvas := _canvas(editor)
+	canvas.zoom = 0.5
+	var view: NodeView = editor._views[&"ring"]
+	var port := (view.position_offset + view.get_output_port_position(0)) * canvas.zoom
+	var line := canvas._get_connection_line(port, port + Vector2(200, 60))
+
+	assert_eq(line.size(), BrainCanvas.SAMPLES * BrainCanvas.STRANDS)
+	_close(editor)
+
+# ------------------------------------------------------------------ file actions
+
+const SCRATCH := "user://test_brains"
+
+func _scratch(name: String) -> String:
+	DirAccess.make_dir_recursive_absolute(SCRATCH)
+	return "%s/%s" % [SCRATCH, name]
+
+func test_a_new_editor_starts_with_no_file() -> void:
+	var editor := _open()
+	assert_eq(editor._current_path, "")
+	assert_false(editor._unsaved, "an empty brain has nothing to lose yet")
+	_close(editor)
+
+func test_editing_marks_the_brain_unsaved() -> void:
+	var editor := _open()
+	editor._add_node(&"constant")
+	assert_true(editor._unsaved, "adding a node is a change")
+	_close(editor)
+
+func test_saving_clears_the_unsaved_mark_and_remembers_the_file() -> void:
+	var editor := _open()
+	editor._add_node(&"constant")
+	var path := _scratch("remembered.brain")
+	assert_true(editor.save_to(path))
+
+	assert_false(editor._unsaved)
+	assert_eq(editor._current_path, path, "Save now writes straight back here")
+	assert_true(FileAccess.file_exists(path))
+	_close(editor)
+
+func test_a_saved_brain_loads_back_the_same() -> void:
+	var editor := _open()
+	editor.graph.add_node(&"c", &"constant", { &"value": 4.25 })
+	var path := _scratch("roundtrip.brain")
+	editor.save_to(path)
+
+	var reopened := _open()
+	reopened.load_file(path)
+	assert_eq(reopened.graph.instances.size(), 1)
+	assert_almost_eq(reopened.graph.instances[&"c"].config[&"value"], 4.25)
+	assert_eq(reopened._current_path, path)
+	assert_false(reopened._unsaved)
+	_close(editor)
+	_close(reopened)
+
+func test_the_extension_is_added_if_you_leave_it_off() -> void:
+	var editor := _open()
+	editor.save_to(_scratch("no_extension"))
+	assert_true(editor._current_path.ends_with(".brain"), editor._current_path)
+	assert_true(FileAccess.file_exists(editor._current_path))
+	_close(editor)
+
+func test_saving_a_copy_leaves_you_editing_the_original() -> void:
+	# The difference between Save As and Save a Copy: one moves you to the new
+	# file, the other does not.
+	var editor := _open()
+	var original := _scratch("original.brain")
+	editor.save_to(original)
+	editor._add_node(&"constant")
+
+	editor.save_to(_scratch("a_copy.brain"), false)
+	assert_eq(editor._current_path, original, "still editing the original")
+	assert_true(editor._unsaved, "and it still has unsaved changes")
+	_close(editor)
+
+func test_a_new_brain_forgets_the_old_one() -> void:
+	var editor := _open()
+	editor.save_to(_scratch("before_new.brain"))
+	editor._add_node(&"add")
+	editor.new_brain()
+
+	assert_eq(editor.graph.instances.size(), 0)
+	assert_eq(editor._current_path, "", "a new brain has no file yet")
+	assert_false(editor._unsaved)
+	_close(editor)
+
+func test_saving_somewhere_impossible_reports_rather_than_pretends() -> void:
+	var editor := _open()
+	assert_false(editor.save_to("user://nope/nowhere/at/all/x.brain"))
+	assert_eq(editor._current_path, "", "a failed save must not claim the file")
 	_close(editor)

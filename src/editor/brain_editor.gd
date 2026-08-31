@@ -9,7 +9,7 @@ const SAVE_DIR := "user://brains"
 var registry: NodeRegistry
 var graph: BrainGraph
 
-var _canvas: GraphEdit
+var _canvas: BrainCanvas
 var _palette: VBoxContainer
 var _problems: RichTextLabel
 var _views: Dictionary = {}   # node id -> NodeView
@@ -17,6 +17,12 @@ var _trays: Dictionary = {}   # tray id -> TrayView
 ## While a drag is running: per tray, which nodes it picked up and where it was
 ## last frame. Empty at every other moment.
 var _carried: Dictionary = {}
+
+## Where Save writes. Empty until the brain has been given a file, at which point
+## Save overwrites it and only Save As asks again.
+var _current_path: String = ""
+var _unsaved := false
+var _file_label: Label
 
 func _ready() -> void:
 	registry = NodeRegistry.create_default()
@@ -63,8 +69,14 @@ func _build_ui() -> void:
 	_build_palette()
 
 	side.add_child(HSeparator.new())
+
+	_file_label = Label.new()
+	_file_label.clip_text = true
+	side.add_child(_file_label)
+
 	side.add_child(_button("Test Drive", _on_test_drive))
-	side.add_child(_button("Save", _on_save))
+	side.add_child(_button("New Brain", _on_new))
+	side.add_child(_build_save_row())
 	side.add_child(_button("Load", _on_load))
 
 	_problems = RichTextLabel.new()
@@ -75,7 +87,7 @@ func _build_ui() -> void:
 	var right := VBoxContainer.new()
 	split.add_child(right)
 
-	_canvas = GraphEdit.new()
+	_canvas = BrainCanvas.new()
 	_canvas.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_canvas.right_disconnects = true
 	# Dotted grid and fat, lazy curves — the two things that make a node canvas
@@ -144,6 +156,33 @@ func _build_palette() -> void:
 	tray_entry.icon = EditorTheme.dot(EditorTheme.TRAY_TITLE, 9)
 	_palette.add_child(tray_entry)
 
+## Save is one click; the arrow beside it opens the less common choices. Keeping
+## Save As behind a dropdown means the common action stays a single button, and
+## the rare one is still one gesture away.
+func _build_save_row() -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 2)
+
+	var save := _button("Save", _on_save)
+	save.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(save)
+
+	var more := MenuButton.new()
+	more.text = "▾"  # a small down arrow
+	more.tooltip_text = "More save options"
+	more.flat = false
+	var menu := more.get_popup()
+	menu.add_item("Save As...", 0)
+	menu.add_item("Save a Copy...", 1)
+	menu.id_pressed.connect(func(id: int) -> void:
+		if id == 0:
+			_ask_for_path(true)
+		else:
+			_ask_for_path(false))  # a copy leaves the open file where it was
+	row.add_child(more)
+
+	return row
+
 func _button(text: String, action: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
@@ -163,6 +202,7 @@ func _add_node(type_id: StringName) -> void:
 	var where := (_canvas.scroll_offset + Vector2(220, 160)) / _canvas.zoom
 	graph.add_node(_unique_id(type_id), type_id, {}, where)
 	_rebuild_canvas()
+	_mark_unsaved()
 	_revalidate()
 
 func _unique_tray_id() -> StringName:
@@ -183,6 +223,7 @@ func _on_delete(names: Array[StringName]) -> void:
 		else:
 			graph.remove_node(view_name)
 	_rebuild_canvas()
+	_mark_unsaved()
 	_revalidate()
 
 func _on_connect(from_view: StringName, from_slot: int, to_view: StringName, to_slot: int) -> void:
@@ -196,12 +237,14 @@ func _on_connect(from_view: StringName, from_slot: int, to_view: StringName, to_
 
 	graph.connect_ports(from_view, from_port, to_view, to_port)
 	_sync_connections()
+	_mark_unsaved()
 	_revalidate()
 
 func _on_disconnect(from_view: StringName, from_slot: int, to_view: StringName, to_slot: int) -> void:
 	graph.disconnect_ports(from_view, _port_id(from_view, from_slot, true),
 		to_view, _port_id(to_view, to_slot, false))
 	_sync_connections()
+	_mark_unsaved()
 	_revalidate()
 
 ## A tray picks up whatever is standing on it. The set is worked out once, when
@@ -254,9 +297,11 @@ func _on_moved() -> void:
 		graph.instances[id].position = view.position_offset
 	for tray_id: StringName in _trays:
 		graph.get_tray(tray_id).position = (_trays[tray_id] as TrayView).position_offset
+	_mark_unsaved()
 
 func _on_config_changed(node_id: StringName, key: StringName, value: Variant) -> void:
 	graph.instances[node_id].config[key] = value
+	_mark_unsaved()
 	_revalidate()
 
 # ---------------------------------------------------------------- drawing it
@@ -399,16 +444,86 @@ func _on_test_drive() -> void:
 
 # ---------------------------------------------------------------- files
 
+## True once the graph differs from what is on disk. Every edit calls this, so
+## New and Load can warn before throwing work away.
+func _mark_unsaved() -> void:
+	_unsaved = true
+	_update_file_label()
+
+func _update_file_label() -> void:
+	if _file_label == null:
+		return
+	var where := _current_path.get_file() if _current_path != "" else "unsaved"
+	_file_label.text = "%s%s" % [where, "  *" if _unsaved else ""]
+	_file_label.tooltip_text = _current_path
+
+## Starts a blank brain. Asks first if there is unsaved work, because silently
+## discarding it is the same mistake as loading over it.
+func _on_new() -> void:
+	if not _unsaved:
+		new_brain()
+		return
+	var confirm := ConfirmationDialog.new()
+	confirm.dialog_text = "Discard unsaved changes to this brain?"
+	confirm.title = "New Brain"
+	confirm.confirmed.connect(new_brain)
+	add_child(confirm)
+	confirm.popup_centered()
+
+func new_brain() -> void:
+	graph = BrainGraph.new()
+	graph.name = "New Brain"
+	_current_path = ""
+	_unsaved = false
+	_rebuild_canvas()
+	_revalidate()
+	_update_file_label()
+
+## Save writes straight back to the open file. A brain that has never been saved
+## has nowhere to write, so the first Save behaves as Save As.
 func _on_save() -> void:
+	if _current_path == "":
+		_ask_for_path(true)
+		return
+	save_to(_current_path, true)
+
+## remember: true for Save As (the file becomes the open one), false for Save a
+## Copy (write it out and carry on editing where you were).
+func _ask_for_path(remember: bool) -> void:
 	DirAccess.make_dir_recursive_absolute(SAVE_DIR)
-	var path := "%s/%s.brain" % [SAVE_DIR, graph.name.to_snake_case()]
+	var dialog := FileDialog.new()
+	dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+	dialog.access = FileDialog.ACCESS_FILESYSTEM
+	dialog.add_filter("*.brain", "Brain files")
+	dialog.current_dir = ProjectSettings.globalize_path(SAVE_DIR)
+	dialog.current_file = "%s.brain" % graph.name.to_snake_case()
+	dialog.size = Vector2i(700, 480)
+	dialog.file_selected.connect(func(path: String) -> void: save_to(path, remember))
+	add_child(dialog)
+	dialog.popup_centered()
+
+## Writes the brain out. Returns whether it got there, so a test can tell the
+## difference between saved and merely attempted.
+func save_to(path: String, remember: bool = true) -> bool:
+	if not path.ends_with(".brain"):
+		path += ".brain"
+
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f == null:
 		_problems.text = "[color=#ff9c8f]could not write %s[/color]" % path
-		return
+		return false
 	f.store_string(BrainFormat.serialize(graph))
 	f.close()
-	_problems.text = "[color=#8fdc8f]saved to %s[/color]" % ProjectSettings.globalize_path(path)
+
+	if remember:
+		# The file is the brain's identity, so the name follows it. Otherwise a
+		# brain saved as "quick_test" would still call itself "New Brain".
+		_current_path = path
+		graph.name = path.get_file().get_basename().capitalize()
+		_unsaved = false
+	_problems.text = "[color=#8fdc8f]saved to %s[/color]" % path
+	_update_file_label()
+	return true
 
 func _on_load() -> void:
 	var dialog := FileDialog.new()
@@ -431,8 +546,12 @@ func load_file(path: String) -> void:
 
 	var result := BrainFormat.parse(FileAccess.get_file_as_string(path))
 	if not result.ok():
-		_problems.text = "[color=#ff9c8f]%s[/color]" % "\n".join(result.errors)
+		_problems.text = "[color=#ff9c8f]%s[/color]" % "
+".join(result.errors)
 		return
 	graph = result.graph
+	_current_path = path
+	_unsaved = false
 	_rebuild_canvas()
 	_revalidate()
+	_update_file_label()
