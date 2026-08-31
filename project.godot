@@ -18,8 +18,12 @@ config/icon="res://icon.svg"
 
 [display]
 
-window/size/viewport_width=1400
-window/size/viewport_height=860
+window/size/viewport_width=1600
+window/size/viewport_height=960
+; Open filling the screen. Stretch is disabled, so the viewport is simply however
+; many real pixels the window has — one texture pixel per screen pixel, nothing
+; scaled up or resampled on the way to the monitor.
+window/size/mode=2
 
 [debug]
 

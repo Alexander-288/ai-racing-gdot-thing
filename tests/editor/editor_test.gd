@@ -59,14 +59,21 @@ func test_a_setting_becomes_a_widget() -> void:
 	editor.graph.add_node(&"c", &"constant", { &"value": 4.0 })
 	editor._rebuild_canvas()
 
-	var found := false
-	for row: Node in _views(editor)[0].get_children():
-		for cell: Node in row.get_children():
-			if cell is SpinBox:
-				found = true
-				assert_almost_eq((cell as SpinBox).value, 4.0, 1e-6, "shows the saved value")
-	assert_true(found, "constant has a setting, so it needs a field")
+	var field := _find_spinbox(_views(editor)[0])
+	assert_true(field != null, "constant has a setting, so it needs a field")
+	assert_almost_eq(field.value, 4.0, 1e-6, "shows the saved value")
 	_close(editor)
+
+## Settings sit in the left column beside the sockets, so how deeply a field is
+## nested is a layout decision the test should not care about.
+func _find_spinbox(node: Node) -> SpinBox:
+	for child: Node in node.get_children():
+		if child is SpinBox:
+			return child as SpinBox
+		var deeper := _find_spinbox(child)
+		if deeper != null:
+			return deeper
+	return null
 
 func test_editing_a_setting_updates_the_graph() -> void:
 	var editor := _open()
@@ -153,4 +160,147 @@ func test_a_broken_file_is_reported_not_opened() -> void:
 	var before := editor.graph
 	editor.load_file("res://brains/does_not_exist.brain")
 	assert_true(editor.graph == before, "a failed load must not wipe your work")
+	_close(editor)
+
+# ------------------------------------------------------------------ trays
+
+func _tray_views(editor: BrainEditor) -> Array:
+	var out: Array = []
+	for child: Node in _canvas(editor).get_children():
+		if child is TrayView:
+			out.append(child)
+	return out
+
+func test_a_tray_is_drawn_behind_the_nodes() -> void:
+	# Order among GraphEdit's children is draw order, so this is what "under" means.
+	var editor := _open()
+	editor.graph.add_node(&"c", &"constant")
+	editor.graph.add_tray(&"t", "Group", Vector2.ZERO, Vector2(400, 300))
+	editor._rebuild_canvas()
+
+	var children := _canvas(editor).get_children()
+	var tray_at := children.find(_tray_views(editor)[0])
+	var node_at := children.find(_views(editor)[0])
+	assert_true(tray_at < node_at, "the tray must be drawn first, so it ends up underneath")
+	_close(editor)
+
+func test_dragging_a_tray_carries_the_nodes_standing_on_it() -> void:
+	var editor := _open()
+	editor.graph.add_node(&"on_it", &"constant", {}, Vector2(60, 60))
+	editor.graph.add_node(&"beside_it", &"constant", {}, Vector2(900, 900))
+	editor.graph.add_tray(&"t", "Group", Vector2(20, 20), Vector2(400, 300))
+	editor._rebuild_canvas()
+
+	editor._on_move_begin(false)
+	var tray: TrayView = _tray_views(editor)[0]
+	tray.position_offset += Vector2(100, 50)  # as a grip drag would
+	editor._on_moved()
+
+	assert_eq(editor.graph.instances[&"on_it"].position, Vector2(160, 110), "picked up")
+	assert_eq(editor.graph.instances[&"beside_it"].position, Vector2(900, 900), "left alone")
+	assert_eq(editor.graph.trays[0].position, Vector2(120, 70), "and the tray itself moved")
+	_close(editor)
+
+func test_a_node_the_user_is_dragging_is_not_carried_as_well() -> void:
+	# Otherwise GraphEdit moves it once and the tray moves it again, and it
+	# travels twice as far as the mouse did.
+	var editor := _open()
+	editor.graph.add_node(&"c", &"constant", {}, Vector2(60, 60))
+	editor.graph.add_tray(&"t", "Group", Vector2(20, 20), Vector2(400, 300))
+	editor._rebuild_canvas()
+
+	var node: NodeView = _views(editor)[0]
+	node.selected = true
+	editor._on_move_begin(true)  # GraphEdit is dragging the selection
+	var tray: TrayView = _tray_views(editor)[0]
+	tray.position_offset += Vector2(100, 0)
+	editor._on_moved()
+
+	assert_eq(editor.graph.instances[&"c"].position, Vector2(60, 60), "moved by the drag, not by us")
+	_close(editor)
+
+func test_deleting_a_tray_leaves_the_nodes_on_it() -> void:
+	var editor := _open()
+	editor.graph.add_node(&"c", &"constant", {}, Vector2(60, 60))
+	editor.graph.add_tray(&"t", "Group", Vector2(20, 20), Vector2(400, 300))
+	editor._rebuild_canvas()
+
+	editor._on_delete([&"t"] as Array[StringName])
+
+	assert_eq(editor.graph.trays.size(), 0)
+	assert_eq(editor.graph.instances.size(), 1, "a tray owns nothing it sits behind")
+	_close(editor)
+
+func test_the_palette_offers_a_tray() -> void:
+	var editor := _open()
+	editor._add_tray()
+	assert_eq(editor.graph.trays.size(), 1)
+	assert_eq(_tray_views(editor).size(), 1, "and it is drawn")
+	_close(editor)
+
+func test_a_tray_moves_only_by_its_grip() -> void:
+	# Dragging a panel this big by its face would shove the layout around on
+	# every stray drag, so GraphEdit is told not to drag trays at all.
+	var editor := _open()
+	editor.graph.add_tray(&"t", "Group")
+	editor._rebuild_canvas()
+	assert_false((_tray_views(editor)[0] as TrayView).draggable)
+	_close(editor)
+
+func test_the_grip_drag_follows_the_mouse_through_the_zoom() -> void:
+	# position_offset is in canvas units and the mouse moves in screen pixels, so
+	# a tray dragged at half zoom must travel twice as far as the pointer did.
+	var editor := _open()
+	editor.graph.add_tray(&"t", "Group", Vector2(100, 100))
+	editor._rebuild_canvas()
+	_canvas(editor).zoom = 0.5
+
+	var tray: TrayView = _tray_views(editor)[0]
+	tray.begin_drag_at(Vector2(500, 500))
+	tray.drag_to(Vector2(560, 500))
+
+	assert_eq(tray.position_offset, Vector2(220, 100))
+	_close(editor)
+
+func test_a_tray_colour_is_remembered() -> void:
+	var editor := _open()
+	editor.graph.add_tray(&"t", "Group")
+	editor._rebuild_canvas()
+	editor._on_tray_colour_changed(&"t", 3)
+	assert_eq(editor.graph.get_tray(&"t").colour, 3)
+	_close(editor)
+
+func test_a_clicked_tray_does_not_climb_on_top_of_its_nodes() -> void:
+	# GraphEdit raises whatever you click to the front. For a tray that would
+	# park a full-size panel over the nodes standing on it: they vanish behind it
+	# and it eats every click meant for them.
+	var editor := _open()
+	editor.graph.add_node(&"c", &"constant")
+	editor.graph.add_tray(&"t", "Group")
+	editor._rebuild_canvas()
+
+	var canvas := _canvas(editor)
+	var tray: TrayView = _tray_views(editor)[0]
+	canvas.move_child(tray, -1)  # exactly what a click does
+	editor._sink_trays()
+
+	var children := canvas.get_children()
+	assert_true(children.find(tray) < children.find(_views(editor)[0]),
+		"the tray must sink back underneath")
+	_close(editor)
+
+func test_every_tray_keeps_its_own_order_when_sunk() -> void:
+	var editor := _open()
+	editor.graph.add_tray(&"first", "One")
+	editor.graph.add_tray(&"second", "Two")
+	editor.graph.add_node(&"c", &"constant")
+	editor._rebuild_canvas()
+
+	var canvas := _canvas(editor)
+	canvas.move_child(editor._trays[&"first"], -1)
+	editor._sink_trays()
+
+	var children := canvas.get_children()
+	assert_eq(children.find(editor._trays[&"first"]), 0)
+	assert_eq(children.find(editor._trays[&"second"]), 1)
 	_close(editor)

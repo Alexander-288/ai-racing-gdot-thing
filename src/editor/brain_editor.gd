@@ -13,6 +13,10 @@ var _canvas: GraphEdit
 var _palette: VBoxContainer
 var _problems: RichTextLabel
 var _views: Dictionary = {}   # node id -> NodeView
+var _trays: Dictionary = {}   # tray id -> TrayView
+## While a drag is running: per tray, which nodes it picked up and where it was
+## last frame. Empty at every other moment.
+var _carried: Dictionary = {}
 
 func _ready() -> void:
 	registry = NodeRegistry.create_default()
@@ -26,23 +30,36 @@ func _ready() -> void:
 
 func _build_ui() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# Set once, on the root: every child control inherits it, including the node
+	# boxes the canvas builds later.
+	theme = EditorTheme.build()
 
 	var split := HSplitContainer.new()
 	split.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(split)
 
-	var side := VBoxContainer.new()
-	side.custom_minimum_size.x = 200
-	split.add_child(side)
+	var frame := PanelContainer.new()
+	frame.theme_type_variation = &"Sidebar"
+	frame.custom_minimum_size.x = 200
+	split.add_child(frame)
 
-	var heading := Label.new()
-	heading.text = "Nodes"
-	side.add_child(heading)
+	var side := VBoxContainer.new()
+	side.add_theme_constant_override("separation", 6)
+	frame.add_child(side)
+
+	# The palette outgrew the window once the registry passed twenty types, so it
+	# scrolls. The scroll container is what expands; the list inside it grows to
+	# whatever height it needs.
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	side.add_child(scroll)
 
 	# The palette is a loop over the registry, never a hand-written list.
 	_palette = VBoxContainer.new()
-	_palette.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	side.add_child(_palette)
+	_palette.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_palette.add_theme_constant_override("separation", 2)
+	scroll.add_child(_palette)
 	_build_palette()
 
 	side.add_child(HSeparator.new())
@@ -61,9 +78,25 @@ func _build_ui() -> void:
 	_canvas = GraphEdit.new()
 	_canvas.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_canvas.right_disconnects = true
+	# Dotted grid and fat, lazy curves — the two things that make a node canvas
+	# read as wiring rather than as a flowchart.
+	_canvas.grid_pattern = GraphEdit.GRID_PATTERN_DOTS
+	_canvas.connection_lines_curvature = 0.65
+	_canvas.connection_lines_thickness = 2.5
+	_canvas.connection_lines_antialiased = true
+	# The sockets and dots are drawn at one texel per pixel, so magnifying far
+	# past life size only magnifies their pixels. This is where that stops.
+	_canvas.zoom_max = 1.5
+	# The minimap earns its place on a big brain, but only as a quiet corner of
+	# the canvas rather than a bright grey slab sitting on top of it.
+	_canvas.minimap_size = Vector2(140, 90)
+	_canvas.minimap_opacity = 0.5
 	_canvas.connection_request.connect(_on_connect)
 	_canvas.disconnection_request.connect(_on_disconnect)
 	_canvas.delete_nodes_request.connect(_on_delete)
+	# GraphEdit only ever drags nodes now, so it always wants the selection left
+	# out — see _on_move_begin.
+	_canvas.begin_node_move.connect(_on_move_begin.bind(true))
 	_canvas.end_node_move.connect(_on_moved)
 	right.add_child(_canvas)
 
@@ -87,11 +120,29 @@ func _build_palette() -> void:
 		if types.is_empty():
 			continue
 		var heading := Label.new()
-		heading.text = category
+		heading.text = category.to_upper()
+		heading.theme_type_variation = &"CategoryLabel"
 		_palette.add_child(heading)
 		for type: NodeType in types:
-			_palette.add_child(_button("  " + type.display_name,
-				func() -> void: _add_node(type.id)))
+			var entry := _button(type.display_name, func() -> void: _add_node(type.id))
+			entry.theme_type_variation = &"PaletteButton"
+			entry.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			# A dot in the node's own role colour, so the palette and the canvas
+			# agree about what a sensor looks like before you have placed one.
+			entry.icon = EditorTheme.dot(EditorTheme.role_colour(type.role), 9)
+			_palette.add_child(entry)
+
+	# The one hand-written palette entry, because a tray is not a node type and
+	# has no business in the registry: it computes nothing.
+	var heading := Label.new()
+	heading.text = "LAYOUT"
+	heading.theme_type_variation = &"CategoryLabel"
+	_palette.add_child(heading)
+	var tray_entry := _button("Tray", _add_tray)
+	tray_entry.theme_type_variation = &"PaletteButton"
+	tray_entry.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	tray_entry.icon = EditorTheme.dot(EditorTheme.TRAY_TITLE, 9)
+	_palette.add_child(tray_entry)
 
 func _button(text: String, action: Callable) -> Button:
 	var b := Button.new()
@@ -114,9 +165,23 @@ func _add_node(type_id: StringName) -> void:
 	_rebuild_canvas()
 	_revalidate()
 
+func _unique_tray_id() -> StringName:
+	var n := 1
+	while graph.has_tray(StringName("tray_%d" % n)):
+		n += 1
+	return StringName("tray_%d" % n)
+
+func _add_tray() -> void:
+	var where := (_canvas.scroll_offset + Vector2(160, 120)) / _canvas.zoom
+	graph.add_tray(_unique_tray_id(), "", where)
+	_rebuild_canvas()
+
 func _on_delete(names: Array[StringName]) -> void:
 	for view_name: StringName in names:
-		graph.remove_node(view_name)
+		if graph.has_tray(view_name):
+			graph.remove_tray(view_name)
+		else:
+			graph.remove_node(view_name)
 	_rebuild_canvas()
 	_revalidate()
 
@@ -139,10 +204,56 @@ func _on_disconnect(from_view: StringName, from_slot: int, to_view: StringName, 
 	_sync_connections()
 	_revalidate()
 
+## A tray picks up whatever is standing on it. The set is worked out once, when
+## the drag starts, so a node cannot join or leave a tray halfway through one.
+##
+## skip_selected is the difference between the two ways a tray can move. When
+## GraphEdit drags a selection that happens to include a tray, it is already
+## moving the selected nodes, and carrying them too would send them twice as far.
+## When the tray moves by its own grip, GraphEdit is not moving anything, so
+## everything standing on the tray comes along.
+func _on_move_begin(skip_selected: bool) -> void:
+	_carried.clear()
+	for tray_id: StringName in _trays:
+		var tray: TrayView = _trays[tray_id]
+		var riding: Array[StringName] = []
+		for node_id: StringName in _views:
+			var view: NodeView = _views[node_id]
+			if skip_selected and view.selected:
+				continue
+			if tray.canvas_rect().has_point(view.position_offset + view.size * 0.5):
+				riding.append(node_id)
+		_carried[tray_id] = { "anchor": tray.position_offset, "riding": riding }
+
+## Called every time a tray shifts during a drag, which is why it works from the
+## step since last frame rather than from where the drag began.
+func _on_tray_moved(tray_id: StringName) -> void:
+	if not _carried.has(tray_id):
+		return
+	var state: Dictionary = _carried[tray_id]
+	var tray: TrayView = _trays[tray_id]
+	var step: Vector2 = tray.position_offset - (state["anchor"] as Vector2)
+	state["anchor"] = tray.position_offset
+	for node_id: StringName in state["riding"]:
+		var view: NodeView = _views[node_id]
+		view.position_offset += step
+
+func _on_tray_title_changed(tray_id: StringName, title: String) -> void:
+	graph.get_tray(tray_id).title = title
+
+func _on_tray_colour_changed(tray_id: StringName, colour: int) -> void:
+	graph.get_tray(tray_id).colour = colour
+
+func _on_tray_resized(tray_id: StringName, new_size: Vector2) -> void:
+	graph.get_tray(tray_id).size = new_size
+
 func _on_moved() -> void:
+	_carried.clear()
 	for id: StringName in _views:
 		var view: NodeView = _views[id]
 		graph.instances[id].position = view.position_offset
+	for tray_id: StringName in _trays:
+		graph.get_tray(tray_id).position = (_trays[tray_id] as TrayView).position_offset
 
 func _on_config_changed(node_id: StringName, key: StringName, value: Variant) -> void:
 	graph.instances[node_id].config[key] = value
@@ -153,12 +264,35 @@ func _on_config_changed(node_id: StringName, key: StringName, value: Variant) ->
 func _rebuild_canvas() -> void:
 	_canvas.clear_connections()
 	for view: Node in _canvas.get_children():
-		if view is NodeView:
+		if view is NodeView or view is TrayView:
 			view.queue_free()
 			_canvas.remove_child(view)
 	_views.clear()
+	_trays.clear()
+	_carried.clear()
 
 	_auto_layout()
+
+	# Trays go in first: GraphEdit draws its children in order, so anything added
+	# afterwards stands on top of them.
+	for tray: BrainGraph.Tray in graph.trays:
+		var tray_view := TrayView.build(tray)
+		tray_view.title_changed.connect(_on_tray_title_changed)
+		tray_view.tray_resized.connect(_on_tray_resized)
+		tray_view.position_offset_changed.connect(_on_tray_moved.bind(tray.id))
+		tray_view.colour_changed.connect(_on_tray_colour_changed)
+		# A tray moves by its grip, which GraphEdit knows nothing about, so the
+		# start and end of that drag are announced by the tray itself.
+		tray_view.drag_started.connect(func(_id: StringName) -> void: _on_move_begin(false))
+		tray_view.drag_ended.connect(func(_id: StringName) -> void: _on_moved())
+		# Clicking any element makes GraphEdit raise it to the front. For a panel
+		# the size of a tray that means it lands on top of every node it was
+		# holding, hiding them and swallowing their clicks — so a tray asked to
+		# rise is put straight back down. Deferred, because it has to run after
+		# GraphEdit has done the raising.
+		tray_view.raise_request.connect(_sink_trays, CONNECT_DEFERRED)
+		_canvas.add_child(tray_view)
+		_trays[tray.id] = tray_view
 
 	for inst: BrainGraph.Instance in graph.instances.values():
 		var type := registry.get_type(inst.type_id)
@@ -170,6 +304,17 @@ func _rebuild_canvas() -> void:
 		_views[inst.id] = view
 
 	_sync_connections()
+
+## Trays live at the bottom of the canvas's child list, because that list is the
+## draw order and the pick order both: last child drawn on top, last child asked
+## first whether the mouse hit it. Everything that keeps a tray underneath the
+## nodes comes down to this one ordering.
+func _sink_trays() -> void:
+	var index := 0
+	for tray: BrainGraph.Tray in graph.trays:
+		if _trays.has(tray.id):
+			_canvas.move_child(_trays[tray.id], index)
+			index += 1
 
 ## Hand-written brain files carry no positions, so every box would land on the
 ## same spot. Anything still at the origin gets placed by how far downstream it

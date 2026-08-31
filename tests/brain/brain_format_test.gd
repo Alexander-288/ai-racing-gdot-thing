@@ -98,3 +98,42 @@ func test_an_old_file_without_positions_still_loads() -> void:
 	var result := BrainFormat.parse("format 1\nnode c constant\n    value = 1.0\n")
 	assert_true(result.ok(), "  ".join(result.errors))
 	assert_eq(result.graph.instances[&"c"].position, Vector2.ZERO)
+
+# ------------------------------------------------------------------ trays
+
+## Trays are editor furniture, but they live in the brain file for the same
+## reason node positions do: it is where the author's layout is kept.
+func _trayed_graph() -> BrainGraph:
+	var g := _counter_graph()
+	var tray := g.add_tray(&"counting", "The counting bit", Vector2(40, 60), Vector2(420, 300))
+	tray.colour = 4
+	return g
+
+func test_a_tray_round_trips() -> void:
+	var result := BrainFormat.parse(BrainFormat.serialize(_trayed_graph()))
+	assert_true(result.ok(), "  ".join(result.errors))
+	assert_eq(result.graph.trays.size(), 1)
+	var tray := result.graph.trays[0]
+	assert_eq(tray.id, &"counting")
+	assert_eq(tray.title, "The counting bit")
+	assert_almost_eq(tray.position.x, 40.0)
+	assert_almost_eq(tray.size.y, 300.0)
+	assert_eq(tray.colour, 4)
+	assert_eq(result.graph.instances.size(), 2, "and the nodes are still there")
+
+func test_a_tray_does_not_disturb_the_nodes_around_it() -> void:
+	# A tray block sits between nodes in the file, so the parser has to stop
+	# treating the tray's indented lines as settings for the node above it.
+	var text := "format 1\nname \"X\"\nnode one constant\n    value = 3.0\n" \
+		+ "tray t \"Group\"\n    at 10 20\n    size 200 150\nnode two constant\n    value = 4.0\n"
+	var result := BrainFormat.parse(text)
+	assert_true(result.ok(), "  ".join(result.errors))
+	assert_almost_eq(result.graph.instances[&"one"].config[&"value"], 3.0)
+	assert_almost_eq(result.graph.instances[&"two"].config[&"value"], 4.0)
+	assert_eq(result.graph.trays[0].title, "Group")
+	assert_false(result.graph.instances[&"one"].config.has(&"size"),
+		"the tray's own lines must not leak into the node before it")
+
+func test_a_broken_tray_is_reported() -> void:
+	var result := BrainFormat.parse("format 1\ntray t \"G\"\n    at 10\n")
+	assert_false(result.ok(), "a tray with half a position is not silently accepted")

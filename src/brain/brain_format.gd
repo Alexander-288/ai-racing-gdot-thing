@@ -34,6 +34,16 @@ static func serialize(graph: BrainGraph) -> String:
 	out.append("name %s" % _quote(graph.name))
 	out.append("")
 
+	# Trays first, because that is the order they are drawn in: background, then
+	# the nodes standing on it.
+	for tray: BrainGraph.Tray in graph.trays:
+		out.append("tray %s %s" % [tray.id, _quote(tray.title)])
+		out.append("    at %s %s" % [_write_float(tray.position.x), _write_float(tray.position.y)])
+		out.append("    size %s %s" % [_write_float(tray.size.x), _write_float(tray.size.y)])
+		if tray.colour != 0:  # 0 is the plain one, and not worth a line
+			out.append("    colour %d" % tray.colour)
+		out.append("")
+
 	for inst: BrainGraph.Instance in graph.instances.values():
 		out.append("node %s %s" % [inst.id, inst.type_id])
 		# Where it sits on the canvas. Layout only — the runtime ignores it.
@@ -81,6 +91,7 @@ static func parse(text: String) -> ParseResult:
 	var result := ParseResult.new()
 	result.graph = BrainGraph.new()
 	var current: BrainGraph.Instance = null
+	var current_tray: BrainGraph.Tray = null
 	var line_no := 0
 
 	for raw_line: String in text.split("\n"):
@@ -92,13 +103,16 @@ static func parse(text: String) -> ParseResult:
 		# Indentation is what marks a config line, so it belongs to the node above.
 		var indented := raw_line.begins_with(" ") or raw_line.begins_with("\t")
 		if indented:
-			if current == null:
-				result.errors.append("line %d: setting outside any node" % line_no)
-			else:
+			if current != null:
 				_read_config(line, current, line_no, result)
+			elif current_tray != null:
+				_read_tray_setting(line, current_tray, line_no, result)
+			else:
+				result.errors.append("line %d: setting outside any node" % line_no)
 			continue
 
 		current = null
+		current_tray = null
 		var parts := line.split(" ", false)
 		match parts[0]:
 			"format":
@@ -107,6 +121,8 @@ static func parse(text: String) -> ParseResult:
 				result.graph.name = _read_string(line.substr(4).strip_edges(), line_no, result)
 			"node":
 				current = _read_node(parts, line_no, result)
+			"tray":
+				current_tray = _read_tray(line, parts, line_no, result)
 			"wire":
 				_read_wire(line, line_no, result)
 			_:
@@ -130,6 +146,45 @@ static func _read_node(parts: PackedStringArray, line_no: int, result: ParseResu
 		result.errors.append("line %d: there is already a node called '%s'" % [line_no, id])
 		return null
 	return result.graph.add_node(id, StringName(parts[2]))
+
+## A tray is layout, so a file with a broken one is still a runnable brain — but
+## it is reported like anything else rather than silently dropped.
+static func _read_tray(line: String, parts: PackedStringArray, line_no: int,
+		result: ParseResult) -> BrainGraph.Tray:
+	if parts.size() < 2:
+		result.errors.append("line %d: expected 'tray <id> \"<title>\"'" % line_no)
+		return null
+	var id := StringName(parts[1])
+	if result.graph.has_tray(id):
+		result.errors.append("line %d: there is already a tray called '%s'" % [line_no, id])
+		return null
+	# Everything past the id is the title, because a title may contain spaces.
+	# Measured from the end of the keyword rather than by searching for the id:
+	# a tray called "t" would otherwise match the "t" in "tray" itself.
+	var title := line.substr(4).strip_edges().substr(parts[1].length()).strip_edges()
+	return result.graph.add_tray(id, "" if title.is_empty() else _read_string(title, line_no, result))
+
+static func _read_tray_setting(line: String, tray: BrainGraph.Tray, line_no: int,
+		result: ParseResult) -> void:
+	if line.begins_with("at "):
+		tray.position = _read_pair(line.substr(3), "at", line_no, result)
+	elif line.begins_with("size "):
+		tray.size = _read_pair(line.substr(5), "size", line_no, result)
+	elif line.begins_with("colour "):
+		var raw := line.substr(7).strip_edges()
+		if raw.is_valid_int():
+			tray.colour = raw.to_int()
+		else:
+			result.errors.append("line %d: expected 'colour <number>'" % line_no)
+	else:
+		result.errors.append("line %d: a tray has only 'at', 'size' and 'colour'" % line_no)
+
+static func _read_pair(raw: String, keyword: String, line_no: int, result: ParseResult) -> Vector2:
+	var parts := raw.split(" ", false)
+	if parts.size() != 2:
+		result.errors.append("line %d: expected '%s <x> <y>'" % [line_no, keyword])
+		return Vector2.ZERO
+	return Vector2(_read_float(parts[0], line_no, result), _read_float(parts[1], line_no, result))
 
 static func _read_wire(line: String, line_no: int, result: ParseResult) -> void:
 	var sides := line.substr(4).split("->")
