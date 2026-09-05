@@ -54,12 +54,14 @@ const ROLE_COLOURS := {
 	NodeType.Role.OUTPUT: Color("e58fb0"),
 }
 
-## Socket colours by port kind, so a wrong connection looks wrong before you try
-## it. These are also the colours the wires themselves are drawn in.
+## Socket colours by port kind. One purple family rather than three unrelated
+## hues: a canvas full of cables should look like a loom in one material, with
+## the kinds told apart by tone. These are also the colours CableStyle builds
+## each cable's strands from, so a socket and the wire leaving it always match.
 const KIND_COLOURS := {
-	Port.Kind.FLOAT: Color("6fb4f0"),
-	Port.Kind.BOOL: Color("e8b06a"),
-	Port.Kind.VECTOR: Color("86dc9a"),
+	Port.Kind.FLOAT: Color("9a86f0"),   # periwinkle — one number
+	Port.Kind.BOOL: Color("cf8ae4"),    # orchid — a yes or a no
+	Port.Kind.VECTOR: Color("7b6ae8"),  # deep violet — eight numbers at once
 }
 
 static func role_colour(role: int) -> Color:
@@ -79,6 +81,27 @@ static func dot(colour: Color, size: int = 10) -> ImageTexture:
 			var edge := r - Vector2(x + 0.5 - r, y + 0.5 - r).length()
 			if edge > 0.0:
 				img.set_pixel(x, y, Color(colour, minf(edge, 1.0)))
+	return ImageTexture.create_from_image(img)
+
+## A socket. Not a dot: a small rounded rectangle, so a port reads as a connector
+## you plug into rather than a full stop. Godot tints this icon with the slot's
+## colour, so it is drawn white — and the brightness falling off towards the
+## bottom survives that tinting as a shade across the connector.
+static func connector(width: int = 14, height: int = 8, radius: float = 3.0) -> ImageTexture:
+	var img := Image.create(width, height, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var half := Vector2(width, height) * 0.5
+	for y in height:
+		for x in width:
+			# Distance to a rounded rectangle: measure to the inner box, then
+			# subtract the corner radius. Negative is inside.
+			var from_middle := (Vector2(x + 0.5, y + 0.5) - half).abs()
+			var corner := from_middle - (half - Vector2(radius, radius))
+			var distance := Vector2(maxf(corner.x, 0.0), maxf(corner.y, 0.0)).length() - radius
+			var alpha := clampf(-distance, 0.0, 1.0)
+			if alpha > 0.0:
+				var shade := lerpf(1.0, 0.68, y / maxf(height - 1.0, 1.0))
+				img.set_pixel(x, y, Color(shade, shade, shade, alpha))
 	return ImageTexture.create_from_image(img)
 
 # ---------------------------------------------------------------- the pieces
@@ -202,10 +225,8 @@ static func _nodes(t: Theme) -> void:
 	t.set_stylebox("slot", "GraphNode", empty(1))
 	t.set_constant("separation", "GraphNode", 1)
 	t.set_color("resizer_color", "GraphNode", TEXT_DIM)
-	# Small ports. The default is a chunky ringed circle; the reference uses a
-	# plain dot that sits on the node edge and stays out of the way. Godot tints
-	# this icon with the slot colour, so it is drawn white.
-	t.set_icon("port", "GraphNode", dot(Color.WHITE, 9))
+	# Sockets are connectors, not dots — see EditorTheme.connector.
+	t.set_icon("port", "GraphNode", connector())
 
 ## The sidebar, and the two button shapes living in it. Type variations mean a
 ## palette button and a Save button can look different without either of them

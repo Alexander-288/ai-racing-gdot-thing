@@ -94,7 +94,9 @@ func _build_ui() -> void:
 	# read as wiring rather than as a flowchart.
 	_canvas.grid_pattern = GraphEdit.GRID_PATTERN_DOTS
 	_canvas.connection_lines_curvature = 0.65
-	_canvas.connection_lines_thickness = 2.5
+	# GraphEdit draws one line per wire, and that line is the backing rail: the
+	# four strands over it are painted by CableLayer.
+	_canvas.connection_lines_thickness = CableStyle.BACKING_WIDTH
 	_canvas.connection_lines_antialiased = true
 	# The sockets and dots are drawn at one texel per pixel, so magnifying far
 	# past life size only magnifies their pixels. This is where that stops.
