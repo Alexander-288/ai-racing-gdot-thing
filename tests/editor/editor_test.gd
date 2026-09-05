@@ -307,10 +307,9 @@ func test_every_tray_keeps_its_own_order_when_sunk() -> void:
 
 # ------------------------------------------------------------------ cables
 
-## A wire is a loom: four strands over a thin backing rail that GraphEdit draws
-## itself. The strands are this editor's own drawing, so they are what these
-## tests look at.
-func test_every_wire_is_drawn_as_four_strands() -> void:
+## Two kinds of cable. An ordinary wire is one core in its port's colour; a
+## bundle — the wire a network is built out of — is a loom of violet strands.
+func test_an_ordinary_wire_is_a_single_core() -> void:
 	var editor := _open()
 	editor.graph.add_node(&"c", &"constant")
 	editor.graph.add_node(&"t", &"threshold")
@@ -318,25 +317,44 @@ func test_every_wire_is_drawn_as_four_strands() -> void:
 	editor._rebuild_canvas()
 
 	var strands := _canvas(editor).cables.strands()
-	assert_eq(strands.size(), CableStyle.STRANDS, "one wire, four strands")
-	for i in CableStyle.STRANDS:
-		assert_eq(strands[i]["colour"], CableStyle.strand_colours(Port.Kind.FLOAT)[i],
-			"each strand is its own tone of the port's colour")
+	assert_eq(strands.size(), 1, "a plain wire is one line, as it always was")
+	assert_eq(strands[0]["colour"], EditorTheme.KIND_COLOURS[Port.Kind.FLOAT],
+		"and it keeps its own colour rather than the network violet")
 	_close(editor)
 
-func test_a_bundle_is_a_fatter_loom_than_a_plain_wire() -> void:
-	# Both are four strands; a bundle carries eight numbers, so it is spread wider.
-	assert_true(CableStyle.gap(Port.Kind.VECTOR) > CableStyle.gap(Port.Kind.FLOAT))
-	assert_eq(CableStyle.offsets(Port.Kind.FLOAT).size(), CableStyle.STRANDS)
+func test_a_bundle_is_drawn_as_a_loom() -> void:
+	var editor := _open()
+	editor.graph.add_node(&"ring", &"ray_ring")
+	editor.graph.add_node(&"un", &"unpack")
+	editor.graph.connect_ports(&"ring", &"distances", &"un", &"in")
+	editor._rebuild_canvas()
 
-func test_the_strands_of_a_cable_are_only_slightly_different() -> void:
+	var strands := _canvas(editor).cables.strands()
+	assert_eq(strands.size(), CableStyle.STRANDS, "a bundle is a loom of strands")
+	for i in CableStyle.STRANDS:
+		assert_eq(strands[i]["colour"], CableStyle.strand_colours(Port.Kind.VECTOR)[i],
+			"each strand is its own tone of the bundle violet")
+	_close(editor)
+
+func test_only_bundles_get_the_loom() -> void:
+	assert_true(CableStyle.is_loom(Port.Kind.VECTOR))
+	assert_false(CableStyle.is_loom(Port.Kind.FLOAT))
+	assert_false(CableStyle.is_loom(Port.Kind.BOOL))
+	assert_eq(CableStyle.offsets(Port.Kind.BOOL), [0.0] as Array[float],
+		"one core, dead centre")
+
+func test_the_strands_of_a_loom_are_only_slightly_different() -> void:
 	# The loom should read as one cable under one light, not as four wires that
 	# happen to run together.
-	var colours := CableStyle.strand_colours(Port.Kind.VECTOR)
 	var base: Color = EditorTheme.KIND_COLOURS[Port.Kind.VECTOR]
-	for colour: Color in colours:
+	for colour: Color in CableStyle.strand_colours(Port.Kind.VECTOR):
 		assert_true(Vector3(colour.r - base.r, colour.g - base.g, colour.b - base.b).length() < 0.25,
 			"a strand strays too far from its cable's colour")
+
+func test_a_cable_is_smooth_enough_not_to_look_stepped() -> void:
+	# The curve is a polyline, so the sample count is literally how round a bend
+	# looks. This is the number that stops a long S-curve reading as facets.
+	assert_true(BrainCanvas.SAMPLES >= 48)
 
 func test_cables_follow_the_nodes_through_a_zoom() -> void:
 	# The strands are painted onto GraphEdit's own connection surface, so they are
@@ -354,97 +372,85 @@ func test_cables_follow_the_nodes_through_a_zoom() -> void:
 
 	assert_almost_eq(at_half[0].x, at_one[0].x * 0.5, 1.0, "halving the zoom halves the reach")
 	_close(editor)
+# ------------------------------------------------------------------ file actions
 
-# ------------------------------------------------------------------ growing nodes
+const SCRATCH := "user://test_brains"
 
-func _ray_view(editor: BrainEditor) -> NodeView:
-	for child: Node in _canvas(editor).get_children():
-		if child is NodeView and (child as NodeView).node_id == &"r":
-			return child
-	return null
+func _scratch(name: String) -> String:
+	DirAccess.make_dir_recursive_absolute(SCRATCH)
+	return "%s/%s" % [SCRATCH, name]
 
-func test_a_ray_node_is_drawn_with_a_grow_footer() -> void:
+func test_a_new_editor_starts_with_no_file() -> void:
 	var editor := _open()
-	editor.graph.add_node(&"r", &"ray")
-	editor._rebuild_canvas()
-
-	var buttons: Array[String] = []
-	for row: Node in _ray_view(editor).get_children():
-		for cell: Node in row.get_children():
-			if cell is Button and not (cell is OptionButton):
-				buttons.append((cell as Button).text)
-	assert_true(buttons.has("+"), "a node that can grow needs a way to grow")
-	assert_true(buttons.has("-"), "and a way to shrink")
+	assert_eq(editor._current_path, "")
+	assert_false(editor._unsaved, "an empty brain has nothing to lose yet")
 	_close(editor)
 
-func test_growing_a_node_gives_it_more_sockets() -> void:
+func test_editing_marks_the_brain_unsaved() -> void:
 	var editor := _open()
-	editor.graph.add_node(&"r", &"ray")
-	editor._rebuild_canvas()
-	assert_eq(_ray_view(editor).output_ports.size(), 4)
-
-	editor._on_shape_changed(&"r", 3)
-	assert_eq(_ray_view(editor).output_ports.size(), 12, "three readings, four sockets each")
-	assert_true(editor._unsaved)
+	editor._add_node(&"constant")
+	assert_true(editor._unsaved, "adding a node is a change")
 	_close(editor)
 
-func test_shrinking_takes_the_wires_with_it() -> void:
-	# A wire left pointing at a socket that is gone is one the validator rejects
-	# and the canvas cannot draw, so it has to go when the socket does.
+func test_saving_clears_the_unsaved_mark_and_remembers_the_file() -> void:
 	var editor := _open()
-	editor.graph.add_node(&"r", &"ray", { &"segments": 2.0 })
-	editor.graph.add_node(&"gas", &"out_throttle")
-	editor.graph.connect_ports(&"r", &"distance_1", &"gas", &"value")
-	editor._rebuild_canvas()
-	assert_eq(editor.graph.wires.size(), 1)
+	editor._add_node(&"constant")
+	var path := _scratch("remembered.brain")
+	assert_true(editor.save_to(path))
 
-	editor._on_shape_changed(&"r", 1)
-	assert_eq(editor.graph.wires.size(), 0, "the wire went with the socket")
-	assert_eq(BrainValidator.validate(editor.graph, editor.registry).size(), 0)
+	assert_false(editor._unsaved)
+	assert_eq(editor._current_path, path, "Save now writes straight back here")
+	assert_true(FileAccess.file_exists(path))
 	_close(editor)
 
-func test_shrinking_leaves_wires_that_still_have_a_socket() -> void:
+func test_a_saved_brain_loads_back_the_same() -> void:
 	var editor := _open()
-	editor.graph.add_node(&"r", &"ray", { &"segments": 3.0 })
-	editor.graph.add_node(&"gas", &"out_throttle")
-	editor.graph.connect_ports(&"r", &"distance", &"gas", &"value")
-	editor._rebuild_canvas()
+	editor.graph.add_node(&"c", &"constant", { &"value": 4.25 })
+	var path := _scratch("roundtrip.brain")
+	editor.save_to(path)
 
-	editor._on_shape_changed(&"r", 1)
-	assert_eq(editor.graph.wires.size(), 1, "segment one survives, so its wire does")
+	var reopened := _open()
+	reopened.load_file(path)
+	assert_eq(reopened.graph.instances.size(), 1)
+	assert_almost_eq(reopened.graph.instances[&"c"].config[&"value"], 4.25)
+	assert_eq(reopened._current_path, path)
+	assert_false(reopened._unsaved)
+	_close(editor)
+	_close(reopened)
+
+func test_the_extension_is_added_if_you_leave_it_off() -> void:
+	var editor := _open()
+	editor.save_to(_scratch("no_extension"))
+	assert_true(editor._current_path.ends_with(".brain"), editor._current_path)
+	assert_true(FileAccess.file_exists(editor._current_path))
 	_close(editor)
 
-func test_a_node_cannot_be_grown_past_its_limit() -> void:
+func test_saving_a_copy_leaves_you_editing_the_original() -> void:
+	# The difference between Save As and Save a Copy: one moves you to the new
+	# file, the other does not.
 	var editor := _open()
-	editor.graph.add_node(&"r", &"ray")
-	editor._on_shape_changed(&"r", 99)
-	assert_almost_eq(editor.graph.instances[&"r"].config[&"segments"], 8.0)
-	editor._on_shape_changed(&"r", -5)
-	assert_almost_eq(editor.graph.instances[&"r"].config[&"segments"], 1.0)
+	var original := _scratch("original.brain")
+	editor.save_to(original)
+	editor._add_node(&"constant")
+
+	editor.save_to(_scratch("a_copy.brain"), false)
+	assert_eq(editor._current_path, original, "still editing the original")
+	assert_true(editor._unsaved, "and it still has unsaved changes")
 	_close(editor)
 
-func test_a_choice_setting_is_a_dropdown() -> void:
+func test_a_new_brain_forgets_the_old_one() -> void:
 	var editor := _open()
-	editor.graph.add_node(&"r", &"ray")
-	editor._rebuild_canvas()
+	editor.save_to(_scratch("before_new.brain"))
+	editor._add_node(&"add")
+	editor.new_brain()
 
-	var found := false
-	for row: Node in _ray_view(editor).get_children():
-		for cell: Node in row.get_children():
-			for widget: Node in (cell.get_children() if cell.get_child_count() > 0 else []):
-				if widget is OptionButton:
-					found = true
-					assert_eq((widget as OptionButton).item_count, 2, "ring or cone")
-	assert_true(found, "the set selector must be a dropdown, not a number box")
+	assert_eq(editor.graph.instances.size(), 0)
+	assert_eq(editor._current_path, "", "a new brain has no file yet")
+	assert_false(editor._unsaved)
 	_close(editor)
 
-func test_picking_the_cone_rebuilds_the_node() -> void:
+func test_saving_somewhere_impossible_reports_rather_than_pretends() -> void:
 	var editor := _open()
-	editor.graph.add_node(&"r", &"ray")
-	editor._rebuild_canvas()
-	editor._on_config_changed(&"r", &"arc", "cone")
-	assert_eq(editor.graph.instances[&"r"].config[&"arc"], "cone")
-	assert_almost_eq(editor.registry.get_type(&"ray").fields_for(
-		editor.graph.instances[&"r"].config)[1].maximum, 5.0, 1e-6,
-		"a cone only has six rays to choose from")
+	assert_false(editor.save_to("user://nope/nowhere/at/all/x.brain"))
+	assert_eq(editor._current_path, "", "a failed save must not claim the file")
 	_close(editor)

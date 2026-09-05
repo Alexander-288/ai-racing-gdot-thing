@@ -10,7 +10,9 @@ extends GraphEdit
 ## The spine is also what GraphEdit uses to decide whether you clicked a wire, so
 ## it stays a plain curve however elaborate the cable looks.
 
-const SAMPLES := 24        # points per curve; enough that a bend reads smooth
+## Points per curve. A cable is drawn as a polyline, so this is literally how
+## round its bends look: too few and a long S-curve reads as a set of facets.
+const SAMPLES := 56
 const MIN_CURVE := 24.0    # so a very short wire still leaves its socket sideways
 
 var cables: CableLayer

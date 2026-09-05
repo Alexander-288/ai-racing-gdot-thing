@@ -4,8 +4,8 @@ extends Control
 ##
 ## GraphEdit will only ever draw one polyline of one thickness per connection, so
 ## four strands over a thinner rail cannot come out of it. What it does draw is
-## the rail: BrainCanvas leaves connection_lines_thickness at BACKING_WIDTH, and
-## this layer paints the loom on top of it.
+## the rail, hairline thin; this layer paints over it — a single core for an
+## ordinary wire, the four-strand loom for a bundle.
 ##
 ## It lives inside GraphEdit's own connection layer, which is what puts it in the
 ## right place at every zoom and scroll without doing any of that arithmetic:
@@ -13,6 +13,11 @@ extends Control
 ## the surface the wires are drawn on.
 
 var canvas: BrainCanvas
+
+## Seconds since the layer appeared, which is what the flow along a cable is
+## drawn against. Kept here rather than read from the engine clock so the whole
+## canvas animates in step.
+var clock := 0.0
 
 static func build(for_canvas: BrainCanvas) -> CableLayer:
 	var layer := CableLayer.new()
@@ -25,12 +30,27 @@ static func build(for_canvas: BrainCanvas) -> CableLayer:
 ## Nodes move, so the cables are repainted every frame. Each one is a few dozen
 ## points; the cost of this is nothing next to the cost of getting it wrong by
 ## caching and forgetting to invalidate.
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	clock += delta
 	queue_redraw()
 
 func _draw() -> void:
 	for strand: Dictionary in strands():
-		draw_polyline(strand["points"], strand["colour"], CableStyle.STRAND_WIDTH, true)
+		var points: PackedVector2Array = strand["points"]
+		draw_polyline_colors(points, _flow_along(points, strand["colour"]),
+			strand["width"], true)
+
+## One colour per point, so the band can travel along the line. Distance is
+## measured along the cable itself rather than across the screen, so the band
+## keeps its shape round a curve.
+func _flow_along(points: PackedVector2Array, base: Color) -> PackedColorArray:
+	var colours := PackedColorArray()
+	var travelled := 0.0
+	for i in points.size():
+		if i > 0:
+			travelled += points[i].distance_to(points[i - 1])
+		colours.append(CableStyle.flowing(base, travelled, clock))
+	return colours
 
 ## Every strand of every cable, ready to paint. Split out from _draw so the
 ## geometry can be checked in a test rather than in a screenshot.
@@ -44,9 +64,12 @@ func strands() -> Array[Dictionary]:
 
 		var from_port: int = wire["from_port"]
 		var to_port: int = wire["to_port"]
-		if from_port >= from_view.type.outputs.size():
+		# The view's own ports, not the type's: a node whose shape depends on its
+		# config has no fixed list, and reading the empty one hid every cable
+		# leaving a Ray node.
+		if from_port >= from_view.output_ports.size():
 			continue
-		var kind: int = from_view.type.outputs[from_port].kind
+		var kind: int = from_view.output_ports[from_port].kind
 
 		# The same coordinates GraphEdit hands to _get_connection_line: a node
 		# reports its ports unscaled, and the connection surface is drawn zoomed.
@@ -57,11 +80,13 @@ func strands() -> Array[Dictionary]:
 
 		var spine := canvas.spine(from, to)
 		var colours := CableStyle.strand_colours(kind)
+		var width := CableStyle.strand_width(kind)
 		var index := 0
 		for offset: float in CableStyle.offsets(kind):
 			out.append({
 				"points": BrainCanvas.offset_curve(spine, offset * canvas.zoom),
 				"colour": colours[index],
+				"width": width * canvas.zoom,
 			})
 			index += 1
 	return out

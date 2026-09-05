@@ -82,7 +82,13 @@ clean but slow, and lifting only for corners beats both.
 **Test Drive works.** The editor's Test Drive button runs the open brain on the test
 oval in a top-down wireframe: track edges, checkpoints, the car, and its 14 rays drawn
 from the same angle list the sensors use — so the picture cannot disagree with what the
-brain was told. Pause, Step, Reset, and 1x/5x/20x. Speeding up runs more ticks per
+brain was told. Pause, Step, Reset, 1x/5x/20x, and Watch next to follow a different car.
+
+The sidebar sets up the session: how many cars, and which track. A field is that
+many copies of the open brain, so self-play is a spinner rather than a feature —
+the race manager does not care that they are all the same brain. Tracks are the
+hand-tuned circuit or one of the generated seeds, which is the quickest way to
+find out whether a brain works anywhere but home. Speeding up runs more ticks per
 frame, never bigger ticks, so it stays deterministic.
 
 The wireframe is an instrument, not the graphical suite. Cel shading, cameras and the

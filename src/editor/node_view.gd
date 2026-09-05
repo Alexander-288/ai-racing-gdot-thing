@@ -48,6 +48,15 @@ static func build(instance: BrainGraph.Instance, node_type: NodeType) -> NodeVie
 	view._build_body(instance)
 	return view
 
+## Nodes fade up rather than appearing outright. Only the alpha is animated:
+## GraphEdit works out where a socket is from the box's position and size, so
+## scaling one would drag its cables away from it mid-tween.
+func _ready() -> void:
+	modulate.a = 0.0
+	var fade := create_tween()
+	fade.tween_property(self, "modulate:a", 1.0, 0.16)
+	fade.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+
 ## The title bar carries three things: a dot in the node's role colour, the type
 ## name in that same colour, and the instance id pushed to the right — the id
 ## matters when you are reading an error message, and not at all the rest of the

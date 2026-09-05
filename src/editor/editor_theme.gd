@@ -54,14 +54,16 @@ const ROLE_COLOURS := {
 	NodeType.Role.OUTPUT: Color("e58fb0"),
 }
 
-## Socket colours by port kind. One purple family rather than three unrelated
-## hues: a canvas full of cables should look like a loom in one material, with
-## the kinds told apart by tone. These are also the colours CableStyle builds
-## each cable's strands from, so a socket and the wire leaving it always match.
+## Socket colours by port kind, so a wrong connection looks wrong before you try
+## it. These are also the colours a cable is drawn in, so a socket and the wire
+## leaving it can never drift apart.
+##
+## The violet is the one that matters: it marks everything a network runs on, and
+## it is the only kind drawn as a loom rather than a single core (CableStyle).
 const KIND_COLOURS := {
-	Port.Kind.FLOAT: Color("9a86f0"),   # periwinkle — one number
-	Port.Kind.BOOL: Color("cf8ae4"),    # orchid — a yes or a no
-	Port.Kind.VECTOR: Color("7b6ae8"),  # deep violet — eight numbers at once
+	Port.Kind.FLOAT: Color("6fb4f0"),   # blue — one number
+	Port.Kind.BOOL: Color("e8b06a"),    # amber — a yes or a no
+	Port.Kind.VECTOR: Color("7b6ae8"),  # violet — eight numbers at once
 }
 
 static func role_colour(role: int) -> Color:

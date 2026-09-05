@@ -20,6 +20,11 @@ var _carried: Dictionary = {}
 
 ## Where Save writes. Empty until the brain has been given a file, at which point
 ## Save overwrites it and only Save As asks again.
+## How the next Test Drive is set up. Kept on the editor rather than asked for
+## each time, so trying a change is one click.
+var grid_size: int = 1
+var track_seed: int = 0  # 0 is the hand-tuned circuit; anything else is generated
+
 var _current_path: String = ""
 var _unsaved := false
 var _file_label: Label
@@ -74,6 +79,7 @@ func _build_ui() -> void:
 	_file_label.clip_text = true
 	side.add_child(_file_label)
 
+	side.add_child(_race_setup())
 	side.add_child(_button("Test Drive", _on_test_drive))
 	side.add_child(_button("New Brain", _on_new))
 	side.add_child(_build_save_row())
@@ -94,8 +100,9 @@ func _build_ui() -> void:
 	# read as wiring rather than as a flowchart.
 	_canvas.grid_pattern = GraphEdit.GRID_PATTERN_DOTS
 	_canvas.connection_lines_curvature = 0.65
-	# GraphEdit draws one line per wire, and that line is the backing rail: the
-	# four strands over it are painted by CableLayer.
+	# GraphEdit draws one hairline per wire and CableLayer paints over it: on a
+	# bundle that hairline shows through as the rail beneath the loom, and on an
+	# ordinary wire the single core covers it completely.
 	_canvas.connection_lines_thickness = CableStyle.BACKING_WIDTH
 	_canvas.connection_lines_antialiased = true
 	# The sockets and dots are drawn at one texel per pixel, so magnifying far
@@ -157,6 +164,54 @@ func _build_palette() -> void:
 	tray_entry.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	tray_entry.icon = EditorTheme.dot(EditorTheme.TRAY_TITLE, 9)
 	_palette.add_child(tray_entry)
+
+## How many cars, and on what. A field of one is a lap on your own; a full grid
+## is fourteen copies of this same brain, which is what self-play looks like from
+## the outside — the race manager does not care that they are all the same brain.
+func _race_setup() -> VBoxContainer:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 2)
+
+	var cars_row := HBoxContainer.new()
+	var cars_label := Label.new()
+	cars_label.text = "cars"
+	cars_label.theme_type_variation = &"CategoryLabel"
+	cars_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cars_row.add_child(cars_label)
+
+	var cars := SpinBox.new()
+	cars.min_value = 1
+	cars.max_value = 14
+	cars.step = 1
+	cars.value = grid_size
+	cars.custom_minimum_size.x = 70
+	cars.value_changed.connect(func(v: float) -> void: grid_size = int(v))
+	cars_row.add_child(cars)
+	box.add_child(cars_row)
+
+	var track_row := HBoxContainer.new()
+	var track_label := Label.new()
+	track_label.text = "track"
+	track_label.theme_type_variation = &"CategoryLabel"
+	track_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	track_row.add_child(track_label)
+
+	# The hand-tuned circuit, then a few from the generator — a brain that only
+	# works on the first is exactly what held-out tracks are meant to catch.
+	var picker := OptionButton.new()
+	picker.custom_minimum_size.x = 70
+	picker.add_item("circuit", 0)
+	for seed in range(1, 6):
+		picker.add_item("seed %d" % seed, seed)
+	picker.select(track_seed)
+	picker.item_selected.connect(func(i: int) -> void: track_seed = picker.get_item_id(i))
+	track_row.add_child(picker)
+	box.add_child(track_row)
+
+	return box
+
+func chosen_track() -> Track:
+	return Track.grand_prix() if track_seed == 0 else Track.generated(track_seed)
 
 ## Save is one click; the arrow beside it opens the less common choices. Keeping
 ## Save As behind a dropdown means the common action stays a single button, and
@@ -490,7 +545,12 @@ func _on_test_drive() -> void:
 		_revalidate()
 		return  # a brain with problems is not worth watching drive
 
-	var view := DebugView.open(graph, registry, Track.grand_prix())
+	# Every car gets its own copy, because each needs its own node state — two
+	# cars sharing one graph would share one accumulator.
+	var field: Array = []
+	for i in grid_size:
+		field.append(BrainFormat.parse(BrainFormat.serialize(graph)).graph)
+	var view := DebugView.open_field(field, registry, chosen_track())
 	view.closed.connect(func() -> void:
 		remove_child(view)
 		view.queue_free())
