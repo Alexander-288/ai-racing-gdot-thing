@@ -23,6 +23,17 @@ const WALL_SCRAPE := 0.02        # per-tick cost of sliding along a barrier
 const DAMAGE_PER_IMPACT := 0.012 # so a 40 m/s head-on costs about half the car
 const DAMAGE_COST := 0.6         # at full damage the car keeps 40% of everything
 
+# DRS: the wing lies down. Far less drag, so a much higher top speed — and far
+# less downforce, so much less grip to corner on. No activation zones and no
+# one-second rule yet; those arrive with slipstream. For now the tradeoff polices
+# itself, because opening it in a corner puts you in the wall.
+const DRS_DRAG := 0.45           # share of normal drag while it is open
+const DRS_GRIP := 0.55           # share of normal cornering grip while it is open
+
+const RADIUS := 1.6              # cars are circles to the sim; close enough at this scale
+const CONTACT_BITE := 0.35       # speed lost in a square hit on another car
+const CONTACT_DAMAGE := 0.008    # contact hurts, but less than a barrier does
+
 # Heading is an angle where 0 points along +Y. Forward is (sin, cos), so the
 # car's own frame matches the snapshot's: x is right, y is forward.
 var position: Vector2 = Vector2.ZERO
@@ -30,8 +41,11 @@ var heading: float = 0.0
 var speed: float = 0.0
 var angular_velocity: float = 0.0
 
+var drs_open: bool = false
 var damage: float = 0.0       # 0 is fresh, 1 is wrecked
 var touching_wall: bool = false
+
+var position_in_field: int = 1
 
 var lap: int = 0
 var next_checkpoint: int = 1  # starts on checkpoint 0, so it is heading for 1
@@ -42,6 +56,43 @@ static func at_start(track: Track) -> Car:
 	c.position = track.start_position()
 	c.heading = track.start_heading()
 	return c
+
+## Lines this car up on the grid rather than on the start line itself, which is
+## what a field of more than one needs.
+static func at_grid_slot(track: Track, index: int, count: int) -> Car:
+	var slot := track.grid_slot(index, count)
+	var c := Car.new()
+	c.position = slot[&"position"]
+	c.heading = slot[&"heading"]
+	return c
+
+## Pushes two overlapping cars apart and charges both for it. Returns whether
+## they were actually touching.
+##
+## Contact is legal and a valid strategy (spec 2.1), so this is deliberately
+## survivable: a nudge costs a little speed, a square hit costs a lot. Both cars
+## pay, so punting a rival off is never free.
+func collide_with(other: Car) -> bool:
+	var between := other.position - position
+	var gap := between.length()
+	if gap >= RADIUS * 2.0 or gap <= 0.0001:
+		return false
+
+	var push := between / gap
+	var overlap := RADIUS * 2.0 - gap
+	position -= push * overlap * 0.5
+	other.position += push * overlap * 0.5
+
+	# How hard depends on how much each car was driving into the other.
+	var into := maxf(forward().dot(push), 0.0)
+	var other_into := maxf(other.forward().dot(-push), 0.0)
+	var closing := speed * into + other.speed * other_into
+
+	damage = minf(damage + closing * CONTACT_DAMAGE * into, 1.0)
+	other.damage = minf(other.damage + closing * CONTACT_DAMAGE * other_into, 1.0)
+	speed = maxf(speed * (1.0 - into * CONTACT_BITE), 0.0)
+	other.speed = maxf(other.speed * (1.0 - other_into * CONTACT_BITE), 0.0)
+	return true
 
 func forward() -> Vector2:
 	return Vector2(sin(heading), cos(heading))
@@ -55,9 +106,14 @@ func step(controls: CarControls, track: Track) -> void:
 	# Damage costs engine, braking and grip alike (spec 2.2).
 	var health := 1.0 - damage * DAMAGE_COST
 
+	drs_open = controls.drs
+
 	var push := controls.throttle * ENGINE * health
-	var slow := controls.brake * BRAKING * health + DRAG * speed
-	speed = clampf(speed + (push - slow) * TICK, 0.0, MAX_SPEED * health)
+	var drag := DRAG * (DRS_DRAG if drs_open else 1.0)
+	var slow := controls.brake * BRAKING * health + drag * speed
+	# Less drag means a higher top speed, not a bigger engine.
+	var ceiling := MAX_SPEED * health * (1.0 / DRS_DRAG if drs_open else 1.0)
+	speed = clampf(speed + (push - slow) * TICK, 0.0, minf(ceiling, MAX_SPEED * 1.6))
 
 	# Two different limits, and the slower one wins.
 	#
@@ -67,7 +123,8 @@ func step(controls: CarControls, track: Track) -> void:
 	# only supply so much. So turn radius grows with the SQUARE of speed, which
 	# is what makes braking for a corner a real decision instead of a formality.
 	var steering_limit := TURN_RATE * clampf(speed / GRIP_SPEED, 0.0, 1.0)
-	var grip_limit := MAX_LATERAL / maxf(speed, 0.5)
+	var lateral := MAX_LATERAL * (DRS_GRIP if drs_open else 1.0)
+	var grip_limit := lateral / maxf(speed, 0.5)
 	angular_velocity = controls.steering * minf(steering_limit, grip_limit) * health
 	heading = wrapf(heading + angular_velocity * TICK, -PI, PI)
 

@@ -75,6 +75,45 @@ func start_heading() -> float:
 	var forward := centre_line[(here + 1) % centre_line.size()] - centre_line[here]
 	return atan2(forward.x, forward.y)
 
+## Where car `index` of `count` lines up before the start. Two abreast, staggered
+## either side of the centre line and spaced back down the road, like a real grid.
+func grid_slot(index: int, count: int) -> Dictionary:
+	const ROW_GAP := 9.0      # metres between rows
+	const FIRST_ROW := 6.0    # how far back pole sits from the line
+	const SIDE := 0.45        # how far off centre, as a share of half width
+
+	var row := floori(float(index) / 2.0)
+	var walked := _walk_back(_nearest_centre_index(checkpoint_at(0)),
+		FIRST_ROW + ROW_GAP * float(row))
+
+	var here: int = walked[&"index"]
+	var ahead: Vector2 = centre_line[(here + 1) % centre_line.size()] - centre_line[here]
+	var heading := atan2(ahead.x, ahead.y)
+
+	# Odd indexes take the other side of the road, so the grid zig-zags.
+	var sideways := Vector2(cos(heading), -sin(heading))
+	var offset := (1.0 if index % 2 == 0 else -1.0) * half_width * SIDE
+	if count <= 1:
+		offset = 0.0
+
+	return { &"position": (walked[&"position"] as Vector2) + sideways * offset, &"heading": heading }
+
+## Steps backwards along the centre line, following the road rather than cutting
+## across it. Gives up after one lap so a silly distance cannot loop forever.
+func _walk_back(from_index: int, distance: float) -> Dictionary:
+	var count := centre_line.size()
+	var here := from_index
+	var left := distance
+	for step in count:
+		var previous := (here - 1 + count) % count
+		var span: Vector2 = centre_line[here] - centre_line[previous]
+		var length := span.length()
+		if length >= left:
+			return { &"position": centre_line[here] - span.normalized() * left, &"index": previous }
+		left -= length
+		here = previous
+	return { &"position": centre_line[from_index], &"index": from_index }
+
 func _nearest_centre_index(point: Vector2) -> int:
 	var best := 0
 	var best_distance := INF

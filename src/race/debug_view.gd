@@ -41,7 +41,7 @@ static func open(graph: BrainGraph, registry: NodeRegistry, track: Track) -> Deb
 func _ready() -> void:
 	_build_controls()
 	_fit_track()
-	_snapshot = SensorBuilder.build(session.car, session.track)
+	_snapshot = session.snapshot
 
 ## The sim steps in _physics_process, never _process, so it advances in fixed
 ## ticks regardless of frame rate (spec 2.4). Watching faster runs more ticks
@@ -49,13 +49,12 @@ func _ready() -> void:
 func _physics_process(_delta: float) -> void:
 	if not running:
 		return
+	# The session owns the tick order. With a field of cars that order decides
+	# who senses what, so the view must not step anything itself.
 	for i in steps_per_frame:
-		_snapshot = SensorBuilder.build(session.car, session.track)
-		_controls = session.evaluator.tick(_snapshot)
-		session.car.step(_controls, session.track)
-		if session.car.touching_wall:
-			session.wall_hits += 1
-		session.ticks += 1
+		session.tick()
+	_snapshot = session.snapshot
+	_controls = session.controls
 	_update_readout()
 	queue_redraw()
 
@@ -155,11 +154,7 @@ func _build_controls() -> void:
 		_physics_process(0.0)
 		running = false
 		steps_per_frame = was))
-	bar.add_child(_button("Reset", func() -> void:
-		session.car = Car.at_start(session.track)
-		session.evaluator.reset()
-		session.ticks = 0
-		session.wall_hits = 0))
+	bar.add_child(_button("Reset", func() -> void: session.restart()))
 	bar.add_child(_button("1x", func() -> void: steps_per_frame = 1))
 	bar.add_child(_button("5x", func() -> void: steps_per_frame = 5))
 	bar.add_child(_button("20x", func() -> void: steps_per_frame = 20))

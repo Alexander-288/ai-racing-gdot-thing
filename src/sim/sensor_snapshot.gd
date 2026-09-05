@@ -31,6 +31,32 @@ var tyre_grip: float = 1.0
 var drs_available: bool = false
 var slipstream: float = 0.0
 
+## What one radar slot found. Everything is relative, like the rest of this file:
+## a brain learns where a rival is compared to itself, never where either of them
+## is on the track.
+class RadarContact extends RefCounted:
+	var found: bool = false
+	var offset: Vector2 = Vector2.ZERO             # x right, y forward
+	var relative_heading: float = 0.0              # radians; 0 means pointing the same way
+	var relative_velocity: Vector2 = Vector2.ZERO  # how the gap is changing
+
+	func distance() -> float:
+		return offset.length()
+
+## The rules a radar slot can be pointed at (spec 2.5). No "random" — no brain
+## benefits from an arbitrarily chosen car.
+const RADAR_MODES: Array[StringName] = [&"closest", &"ahead", &"behind", &"leader", &"slowest_nearby"]
+
+## How close counts as nearby, for the slots that care.
+const NEARBY := 45.0
+
+## Filled slot by slot, keyed by mode. A slot with nothing to report is absent,
+## and the node reading it returns "found = 0" rather than a made-up position.
+var radar: Dictionary = {}
+
+func radar_at(mode: StringName) -> RadarContact:
+	return radar.get(mode, RadarContact.new())
+
 ## Direction to each upcoming checkpoint, in the car's own frame.
 ## x is right, y is forward. Index 0 is the next one.
 ## Checkpoints give route, not racing line (spec 2.5) — they are placed one per

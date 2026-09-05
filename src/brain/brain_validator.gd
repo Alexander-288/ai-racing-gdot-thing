@@ -69,6 +69,7 @@ static func sort_nodes(graph: BrainGraph, registry: NodeRegistry) -> Array[Strin
 const BUDGETS := {
 	&"accumulator": 8,
 	&"neuron": 64,
+	&"radar": 4,
 }
 
 static func _check_budgets(graph: BrainGraph, registry: NodeRegistry) -> PackedStringArray:

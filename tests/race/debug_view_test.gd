@@ -58,7 +58,7 @@ func test_reset_puts_the_car_back() -> void:
 	for i in 200:
 		view._physics_process(0.0)
 	var moved := view.session.car.position
-	view.session.car = Car.at_start(view.session.track)
-	view.session.evaluator.reset()
+	view.session.restart()
 	assert_true(view.session.car.position != moved)
+	assert_eq(view.session.ticks, 0, "restart puts the clock back too")
 	_close(view)

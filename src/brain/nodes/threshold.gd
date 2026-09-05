@@ -11,8 +11,12 @@ static func define() -> NodeType:
 		Port.make_input(&"value", "Value", 0.0),
 		Port.make_input(&"target", "Target", 0.0),
 	]
+	# A bool, because "is this bigger than that" is a yes-or-no question. It is
+	# the only way a brain can compute a decision and feed it to something that
+	# wants one, such as DRS. Bools widen into float sockets, so using a
+	# threshold as a 0/1 multiplier still works.
 	t.outputs = [
-		Port.make_output(&"out", "Out", 0.0, 1.0),
+		Port.make_output(&"out", "Out", 0.0, 1.0, Port.Kind.BOOL),
 	]
 
 	# _cfg is unused: this node has no baked-in settings, its target is a wire.

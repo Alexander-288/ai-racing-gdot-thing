@@ -13,6 +13,7 @@ static func create_default() -> NodeRegistry:
 	r.register(SensorNodes.ray_ring())
 	r.register(SensorNodes.self_state())
 	r.register(SensorNodes.checkpoint())
+	r.register(SensorNodes.radar())
 	r.register(ControlNodes.steering())
 	r.register(ControlNodes.throttle())
 	r.register(ControlNodes.brake())
