@@ -103,4 +103,14 @@ and exact. A mis-shaped matrix is rejected on load, not discovered on track.
 Fairness budgets are enforced: 64 neurons and 8 accumulators per brain. Both are
 tuning knobs (spec 5); what matters is that the check runs before a race.
 
-Next: Phase 3 — slipstream, DRS, weather, tyre wear, and car-to-car contact.
+**Phase 3, in part.** There is a grid: fourteen cars, staggered two abreast, each
+with its own brain. Cars collide with each other, rays see them, and four radar
+slots report a rival picked by rule rather than by name. DRS opens the wing for a
+much higher top speed and much less grip.
+
+Deferred to later: slipstream, weather, tyre wear. DRS has no activation zones or
+one-second rule yet for the same reason — both need slipstream.
+
+Fourteen cars cost 14.8 ms a tick against a 16.6 ms budget, down from 27.1 ms.
+
+Next: Phase 4 — headless batch racing, self-play and telemetry.

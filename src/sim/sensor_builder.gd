@@ -27,8 +27,20 @@ static func ray_angles() -> Array[float]:
 static func build(car: Car, track: Track, others: Array = [], self_index: int = -1) -> SensorSnapshot:
 	var s := SensorSnapshot.new()
 
+	# The ring and the aimable set overlap: straight ahead and straight behind are
+	# in both. Casting either twice would cost a seventh of all ray work for two
+	# numbers we already have, so identical directions are cast once and shared.
+	var already_cast: Dictionary = {}
+	var origin_distance := track.distance_to_centre(car.position)
 	for angle: float in ray_angles():
-		_add_ray(s, car, track, angle, others, self_index)
+		var key := snappedf(angle, 0.0001)
+		if not already_cast.has(key):
+			already_cast[key] = _cast(car, track, angle, others, self_index, origin_distance)
+		var hit: Dictionary = already_cast[key]
+		s.ray_distance.append(hit[&"distance"])
+		s.ray_hit_track.append(hit[&"track"])
+		s.ray_hit_car.append(hit[&"car"])
+		s.ray_hit_object.append(false)  # nothing but cars and barriers exists yet
 
 	s.speed = car.speed
 	s.forward_speed = car.speed  # no sideways slide in the Phase 1 car model
@@ -54,37 +66,46 @@ static func build(car: Car, track: Track, others: Array = [], self_index: int = 
 ## Radar: up to four slots, each pointed at one rival by a rule rather than by
 ## name (spec 2.5). Relative position, heading and velocity — never an absolute
 ## anything, same as the rest of the snapshot.
+##
+## Every rival is put into the car's own frame once, and all five rules then read
+## that. Doing the transform per rule instead meant doing it five times over.
 static func _fill_radar(s: SensorSnapshot, car: Car, others: Array, self_index: int) -> void:
-	for slot: StringName in SensorSnapshot.RADAR_MODES:
-		var target: Car = _pick(slot, car, others, self_index)
-		if target == null:
-			continue
-		var contact := SensorSnapshot.RadarContact.new()
-		contact.found = true
-		contact.offset = _into_car_frame(car, target.position)
-		contact.relative_heading = wrapf(target.heading - car.heading, -PI, PI)
-		# Their velocity as we see it: what the gap is doing, not what they are doing.
-		contact.relative_velocity = _direction_in_car_frame(car,
-			target.forward() * target.speed - car.forward() * car.speed)
-		s.radar[slot] = contact
-
-static func _pick(mode: StringName, car: Car, others: Array, self_index: int) -> Car:
-	var best: Car = null
-	var best_score := INF
+	var seen: Array = []
 	for i in others.size():
 		if i == self_index:
 			continue
 		var them: Car = others[i]
-		var score := _score(mode, car, them)
-		if score < best_score:
-			best_score = score
-			best = them
-	return null if best_score == INF else best
+		var offset := _into_car_frame(car, them.position)
+		seen.append({ &"car": them, &"offset": offset, &"gap": offset.length() })
+	if seen.is_empty():
+		return
+
+	for mode: StringName in SensorSnapshot.RADAR_MODES:
+		var best: Dictionary = {}
+		var best_score := INF
+		for candidate: Dictionary in seen:
+			var score := _score(mode, candidate)
+			if score < best_score:
+				best_score = score
+				best = candidate
+		if best_score == INF:
+			continue
+
+		var them: Car = best[&"car"]
+		var contact := SensorSnapshot.RadarContact.new()
+		contact.found = true
+		contact.offset = best[&"offset"]
+		contact.relative_heading = wrapf(them.heading - car.heading, -PI, PI)
+		# Their velocity as we see it: what the gap is doing, not what they are doing.
+		contact.relative_velocity = _direction_in_car_frame(car,
+			them.forward() * them.speed - car.forward() * car.speed)
+		s.radar[mode] = contact
 
 ## Lower is a better match. INF means this rival does not qualify for the slot.
-static func _score(mode: StringName, car: Car, them: Car) -> float:
-	var gap := car.position.distance_to(them.position)
-	var ahead := _into_car_frame(car, them.position).y
+static func _score(mode: StringName, candidate: Dictionary) -> float:
+	var gap: float = candidate[&"gap"]
+	var ahead: float = (candidate[&"offset"] as Vector2).y
+	var them: Car = candidate[&"car"]
 	match mode:
 		&"closest":
 			return gap
@@ -100,21 +121,22 @@ static func _score(mode: StringName, car: Car, them: Car) -> float:
 		_:
 			return INF
 
-## Casts one ray and records what it found. Distance is normalised to 0..1 so a
-## brain never has to know the range, and so rays stay comparable between tracks.
-static func _add_ray(s: SensorSnapshot, car: Car, track: Track, angle_from_nose: float,
-		others: Array, self_index: int) -> void:
+## Casts one ray and reports what it found, without touching the snapshot — so
+## the answer can be reused by a second ray pointing the same way.
+static func _cast(car: Car, track: Track, angle_from_nose: float,
+		others: Array, self_index: int, origin_distance: float) -> Dictionary:
 	var direction := car.forward().rotated(-angle_from_nose)
-	var wall := track.ray_distance(car.position, direction, RAY_RANGE)
+	var wall := track.ray_distance(car.position, direction, RAY_RANGE, origin_distance)
 	var rival := _nearest_car_along(car, direction, others, self_index)
 
 	# Whatever the ray reaches first is what it reports. A car in front of a wall
 	# hides the wall, which is exactly what a ray should do.
 	var hit := minf(wall, rival)
-	s.ray_distance.append(hit / RAY_RANGE)
-	s.ray_hit_track.append(hit < RAY_RANGE and wall <= rival)
-	s.ray_hit_car.append(hit < RAY_RANGE and rival < wall)
-	s.ray_hit_object.append(false)  # nothing but cars and barriers exists yet
+	return {
+		&"distance": hit / RAY_RANGE,
+		&"track": hit < RAY_RANGE and wall <= rival,
+		&"car": hit < RAY_RANGE and rival < wall,
+	}
 
 ## How far along the ray the nearest rival sits, treating each car as a circle.
 static func _nearest_car_along(car: Car, direction: Vector2, others: Array, self_index: int) -> float:

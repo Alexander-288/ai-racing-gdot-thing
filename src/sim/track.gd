@@ -21,9 +21,21 @@ var checkpoints: PackedVector2Array = PackedVector2Array()
 ## to be in that point's bucket. So a distance answer is exact up to REACH, and an
 ## empty bucket means "further away than REACH" — which is a useful fact, not a
 ## failure. Padding wider than this only makes every bucket slower to search.
-const CELL := 20.0
-const REACH := 6.0
+const CELL := 8.0
+const REACH := 3.0
 var _grid: Dictionary = {}
+
+## The centre line again, flattened into plain floats.
+##
+## Ray casting is most of a tick: fourteen cars, fourteen rays each, a handful of
+## steps per ray, and every step measures the distance to every nearby segment.
+## At that rate the Vector2 objects and the per-segment method call cost more
+## than the arithmetic does, so the hot loop reads these instead.
+var _seg_ax := PackedFloat64Array()
+var _seg_ay := PackedFloat64Array()
+var _seg_dx := PackedFloat64Array()
+var _seg_dy := PackedFloat64Array()
+var _seg_inv_length_squared := PackedFloat64Array()
 
 ## A simple closed oval for testing and early development. Not a race track —
 ## it exists so a brain can be run at all.
@@ -40,6 +52,7 @@ static func oval(radius_x: float = 60.0, radius_y: float = 38.0, corners: int = 
 func build_index() -> void:
 	_grid.clear()
 	var count := centre_line.size()
+	_flatten_segments(count)
 	var pad := half_width + REACH
 	for i in count:
 		var a := centre_line[i]
@@ -54,6 +67,24 @@ func build_index() -> void:
 				var bucket: PackedInt32Array = _grid[key]
 				bucket.append(i)
 				_grid[key] = bucket
+
+func _flatten_segments(count: int) -> void:
+	_seg_ax.resize(count)
+	_seg_ay.resize(count)
+	_seg_dx.resize(count)
+	_seg_dy.resize(count)
+	_seg_inv_length_squared.resize(count)
+	for i in count:
+		var a := centre_line[i]
+		var b := centre_line[(i + 1) % count]
+		_seg_ax[i] = a.x
+		_seg_ay[i] = a.y
+		var dx := b.x - a.x
+		var dy := b.y - a.y
+		_seg_dx[i] = dx
+		_seg_dy[i] = dy
+		var length_squared := dx * dx + dy * dy
+		_seg_inv_length_squared[i] = 0.0 if length_squared == 0.0 else 1.0 / length_squared
 
 func _nearby_segments(point: Vector2) -> PackedInt32Array:
 	return _grid.get(Vector2i(floori(point.x / CELL), floori(point.y / CELL)), PackedInt32Array())
@@ -262,11 +293,24 @@ func is_on_track(point: Vector2) -> bool:
 ## checked; an empty bucket means nothing is within a cell of here, which is
 ## already further than the track is wide.
 func distance_to_centre(point: Vector2) -> float:
+	# Deliberately written out in floats rather than as a call per segment: this
+	# is the single hottest loop in the sim.
 	var best := INF
-	var count := centre_line.size()
+	var px := point.x
+	var py := point.y
 	for i: int in _nearby_segments(point):
-		best = minf(best, _distance_to_segment(point, centre_line[i], centre_line[(i + 1) % count]))
-	return best
+		var to_start_x := px - _seg_ax[i]
+		var to_start_y := py - _seg_ay[i]
+		var dx := _seg_dx[i]
+		var dy := _seg_dy[i]
+		# How far along the segment the nearest point sits, kept between its ends.
+		var along := clampf((to_start_x * dx + to_start_y * dy) * _seg_inv_length_squared[i], 0.0, 1.0)
+		var off_x := to_start_x - dx * along
+		var off_y := to_start_y - dy * along
+		var squared := off_x * off_x + off_y * off_y
+		if squared < best:
+			best = squared
+	return best if is_inf(best) else sqrt(best)
 
 ## How far a point can move in any direction before it could possibly cross the
 ## track edge. INF answers mean nothing is within REACH, and since every edge lies
@@ -284,17 +328,22 @@ func clearance(point: Vector2) -> float:
 ## currently safe to move — near the middle of the track that is metres at a
 ## time, and it only slows down as it closes on the edge. Same answer, a fraction
 ## of the work, and still a fixed step count so it stays predictable.
-func ray_distance(origin: Vector2, direction: Vector2, max_range: float) -> float:
+## `origin_distance` lets a caller hand in the distance it already measured at the
+## origin. Every ray a car casts starts from the same point, so measuring it once
+## and sharing it saves one query per ray — and there are fourteen of them.
+func ray_distance(origin: Vector2, direction: Vector2, max_range: float,
+		origin_distance: float = NAN) -> float:
 	const STEPS := 24
 	const CLOSE_ENOUGH := 0.15
-	var started_on := is_on_track(origin)
+	var first := distance_to_centre(origin) if is_nan(origin_distance) else origin_distance
+	var started_on := first <= half_width
 	var travelled := 0.0
 
 	for i in STEPS:
 		# One distance query answers both questions — which side of the edge we
 		# are on, and how far we may safely jump. Asking twice doubled the cost
 		# of every ray for nothing.
-		var to_centre := distance_to_centre(origin + direction * travelled)
+		var to_centre := first if i == 0 else distance_to_centre(origin + direction * travelled)
 		if (to_centre <= half_width) != started_on:
 			return travelled  # crossed already; this is the edge to within a step
 		var jump := REACH if is_inf(to_centre) else absf(to_centre - half_width)
