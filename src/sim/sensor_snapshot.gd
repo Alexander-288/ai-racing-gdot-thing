@@ -6,9 +6,27 @@ extends RefCounted
 ## know where it is has to actually drive, which is what makes it work on a track
 ## it has never seen. Every value is egocentric: from the car's own point of view.
 
-const RING_RAYS := 8    # fixed ring, evenly spaced, same for every car
-const AIMED_RAYS := 6   # player chooses the direction of these
-const RAY_COUNT := RING_RAYS + AIMED_RAYS
+## Two sets, and a brain names a ray by which set it is in and which one of them.
+##
+## The ring is eight rays evenly spaced all the way round, starting straight
+## ahead. The cone is six looking forward — an even number, so it is symmetric
+## about the nose with no ray actually on it: dead ahead falls between the middle
+## pair. That is the ring's job, and duplicating it would waste one of the six.
+const RING_RAYS := 8
+const CONE_RAYS := 6
+const RAY_COUNT := RING_RAYS + CONE_RAYS
+
+const RAY_SETS: Array[StringName] = [&"ring", &"cone"]
+
+static func rays_in(set_name: StringName) -> int:
+	return CONE_RAYS if set_name == &"cone" else RING_RAYS
+
+## Where a (set, index) pair lands in the flat arrays below. Out-of-range indexes
+## wrap rather than fail, because the numbers come out of a brain file.
+static func flat_ray(set_name: StringName, index: int) -> int:
+	var count := rays_in(set_name)
+	var wrapped := posmod(index, count)
+	return wrapped + (RING_RAYS if set_name == &"cone" else 0)
 
 # One entry per ray. Same budget for everyone, so the contest measures thinking.
 var ray_distance: Array[float] = []   # 0..1, where 1 means nothing was hit

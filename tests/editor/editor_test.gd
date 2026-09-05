@@ -354,3 +354,97 @@ func test_cables_follow_the_nodes_through_a_zoom() -> void:
 
 	assert_almost_eq(at_half[0].x, at_one[0].x * 0.5, 1.0, "halving the zoom halves the reach")
 	_close(editor)
+
+# ------------------------------------------------------------------ growing nodes
+
+func _ray_view(editor: BrainEditor) -> NodeView:
+	for child: Node in _canvas(editor).get_children():
+		if child is NodeView and (child as NodeView).node_id == &"r":
+			return child
+	return null
+
+func test_a_ray_node_is_drawn_with_a_grow_footer() -> void:
+	var editor := _open()
+	editor.graph.add_node(&"r", &"ray")
+	editor._rebuild_canvas()
+
+	var buttons: Array[String] = []
+	for row: Node in _ray_view(editor).get_children():
+		for cell: Node in row.get_children():
+			if cell is Button and not (cell is OptionButton):
+				buttons.append((cell as Button).text)
+	assert_true(buttons.has("+"), "a node that can grow needs a way to grow")
+	assert_true(buttons.has("-"), "and a way to shrink")
+	_close(editor)
+
+func test_growing_a_node_gives_it_more_sockets() -> void:
+	var editor := _open()
+	editor.graph.add_node(&"r", &"ray")
+	editor._rebuild_canvas()
+	assert_eq(_ray_view(editor).output_ports.size(), 4)
+
+	editor._on_shape_changed(&"r", 3)
+	assert_eq(_ray_view(editor).output_ports.size(), 12, "three readings, four sockets each")
+	assert_true(editor._unsaved)
+	_close(editor)
+
+func test_shrinking_takes_the_wires_with_it() -> void:
+	# A wire left pointing at a socket that is gone is one the validator rejects
+	# and the canvas cannot draw, so it has to go when the socket does.
+	var editor := _open()
+	editor.graph.add_node(&"r", &"ray", { &"segments": 2.0 })
+	editor.graph.add_node(&"gas", &"out_throttle")
+	editor.graph.connect_ports(&"r", &"distance_1", &"gas", &"value")
+	editor._rebuild_canvas()
+	assert_eq(editor.graph.wires.size(), 1)
+
+	editor._on_shape_changed(&"r", 1)
+	assert_eq(editor.graph.wires.size(), 0, "the wire went with the socket")
+	assert_eq(BrainValidator.validate(editor.graph, editor.registry).size(), 0)
+	_close(editor)
+
+func test_shrinking_leaves_wires_that_still_have_a_socket() -> void:
+	var editor := _open()
+	editor.graph.add_node(&"r", &"ray", { &"segments": 3.0 })
+	editor.graph.add_node(&"gas", &"out_throttle")
+	editor.graph.connect_ports(&"r", &"distance", &"gas", &"value")
+	editor._rebuild_canvas()
+
+	editor._on_shape_changed(&"r", 1)
+	assert_eq(editor.graph.wires.size(), 1, "segment one survives, so its wire does")
+	_close(editor)
+
+func test_a_node_cannot_be_grown_past_its_limit() -> void:
+	var editor := _open()
+	editor.graph.add_node(&"r", &"ray")
+	editor._on_shape_changed(&"r", 99)
+	assert_almost_eq(editor.graph.instances[&"r"].config[&"segments"], 8.0)
+	editor._on_shape_changed(&"r", -5)
+	assert_almost_eq(editor.graph.instances[&"r"].config[&"segments"], 1.0)
+	_close(editor)
+
+func test_a_choice_setting_is_a_dropdown() -> void:
+	var editor := _open()
+	editor.graph.add_node(&"r", &"ray")
+	editor._rebuild_canvas()
+
+	var found := false
+	for row: Node in _ray_view(editor).get_children():
+		for cell: Node in row.get_children():
+			for widget: Node in (cell.get_children() if cell.get_child_count() > 0 else []):
+				if widget is OptionButton:
+					found = true
+					assert_eq((widget as OptionButton).item_count, 2, "ring or cone")
+	assert_true(found, "the set selector must be a dropdown, not a number box")
+	_close(editor)
+
+func test_picking_the_cone_rebuilds_the_node() -> void:
+	var editor := _open()
+	editor.graph.add_node(&"r", &"ray")
+	editor._rebuild_canvas()
+	editor._on_config_changed(&"r", &"arc", "cone")
+	assert_eq(editor.graph.instances[&"r"].config[&"arc"], "cone")
+	assert_almost_eq(editor.registry.get_type(&"ray").fields_for(
+		editor.graph.instances[&"r"].config)[1].maximum, 5.0, 1e-6,
+		"a cone only has six rays to choose from")
+	_close(editor)

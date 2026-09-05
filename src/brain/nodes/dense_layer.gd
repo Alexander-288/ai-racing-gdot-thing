@@ -32,6 +32,14 @@ static func define() -> NodeType:
 	t.budget_cost = func(cfg: Dictionary) -> int:
 		return expected_biases(cfg)
 
+	# Weights and biases are imported, not typed in, so they get no widget. The
+	# shape and the activation do.
+	t.config_fields = [
+		ConfigField.number(&"inputs", "in", 1.0, float(MAX_WIDTH), 1.0),
+		ConfigField.number(&"outputs", "out", 1.0, float(MAX_WIDTH), 1.0),
+		ConfigField.choice(&"activation", "shape", ["tanh", "relu", "sigmoid"]),
+	]
+
 	t.inputs = [Port.make_vector_input(&"in", "In")]
 	t.outputs = [Port.make_vector_output(&"out", "Out")]
 

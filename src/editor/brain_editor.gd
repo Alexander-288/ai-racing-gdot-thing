@@ -302,9 +302,60 @@ func _on_moved() -> void:
 	_mark_unsaved()
 
 func _on_config_changed(node_id: StringName, key: StringName, value: Variant) -> void:
-	graph.instances[node_id].config[key] = value
+	var instance: BrainGraph.Instance = graph.instances[node_id]
+	instance.config[key] = value
 	_mark_unsaved()
+
+	# A dropdown can change what the rest of the node looks like — picking the
+	# cone leaves fewer rays to choose from — so those rebuild the box. A number
+	# does not, and rebuilding on every keystroke would take the field's focus away.
+	if _is_choice(instance, key):
+		_prune_wires(node_id)
+		_rebuild_canvas()
 	_revalidate()
+
+func _is_choice(instance: BrainGraph.Instance, key: StringName) -> bool:
+	var type := registry.get_type(instance.type_id)
+	if type == null:
+		return false
+	for field: ConfigField in type.fields_for(instance.config):
+		if field.key == key:
+			return field.kind == ConfigField.Kind.CHOICE
+	return false
+
+## Growing or shrinking a node changes how many sockets it has, so any wire left
+## pointing at a socket that is gone has to go with it.
+func _on_shape_changed(node_id: StringName, segments: int) -> void:
+	var instance: BrainGraph.Instance = graph.instances[node_id]
+	var type := registry.get_type(instance.type_id)
+	if type == null:
+		return
+	instance.config[type.grow_key] = float(clampi(segments, type.grow_min, type.grow_max))
+	_prune_wires(node_id)
+	_mark_unsaved()
+	_rebuild_canvas()
+	_revalidate()
+
+## Drops every wire that refers to a socket this node no longer has. Leaving one
+## behind would be a wire the validator rejects and the canvas cannot draw.
+func _prune_wires(node_id: StringName) -> void:
+	var instance: BrainGraph.Instance = graph.instances[node_id]
+	var type := registry.get_type(instance.type_id)
+	if type == null:
+		return
+	var outputs := _port_ids(type.outputs_for(instance.config))
+	var inputs := _port_ids(type.inputs_for(instance.config))
+
+	for w: BrainGraph.Wire in graph.wires.duplicate():
+		var gone := (w.from_node == node_id and not outputs.has(w.from_port)) 			or (w.to_node == node_id and not inputs.has(w.to_port))
+		if gone:
+			graph.disconnect_ports(w.from_node, w.from_port, w.to_node, w.to_port)
+
+static func _port_ids(ports: Array[Port]) -> Array[StringName]:
+	var ids: Array[StringName] = []
+	for p: Port in ports:
+		ids.append(p.id)
+	return ids
 
 # ---------------------------------------------------------------- drawing it
 
@@ -347,6 +398,7 @@ func _rebuild_canvas() -> void:
 			continue  # unknown types are reported by the validator, not drawn
 		var view := NodeView.build(inst, type)
 		view.config_changed.connect(_on_config_changed)
+		view.shape_changed.connect(_on_shape_changed)
 		_canvas.add_child(view)
 		_views[inst.id] = view
 
@@ -399,8 +451,8 @@ func _sync_connections() -> void:
 			continue
 		var from_view: NodeView = _views[w.from_node]
 		var to_view: NodeView = _views[w.to_node]
-		var from_slot := _slot_of(from_view.type.outputs, w.from_port)
-		var to_slot := _slot_of(to_view.type.inputs, w.to_port)
+		var from_slot := _slot_of(from_view.output_ports, w.from_port)
+		var to_slot := _slot_of(to_view.input_ports, w.to_port)
 		if from_slot >= 0 and to_slot >= 0:
 			_canvas.connect_node(w.from_node, from_slot, w.to_node, to_slot)
 
@@ -408,7 +460,7 @@ func _sync_connections() -> void:
 ## translation, and it is typed explicitly because a Dictionary lookup is untyped.
 func _port_id(view_name: StringName, slot: int, is_output: bool) -> StringName:
 	var view: NodeView = _views[view_name]
-	var ports: Array[Port] = view.type.outputs if is_output else view.type.inputs
+	var ports: Array[Port] = view.output_ports if is_output else view.input_ports
 	return ports[slot].id
 
 static func _slot_of(ports: Array[Port], port_id: StringName) -> int:

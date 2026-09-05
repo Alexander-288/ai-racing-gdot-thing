@@ -9,6 +9,17 @@ var _order: Array[StringName] = []      # everything that is not a source, in de
 var _sensor_ids: Array[StringName] = []
 var _memory_ids: Array[StringName] = []
 var _incoming: Dictionary = {}          # node id -> the wires feeding it
+## Worked out once when the evaluator is built, because none of it changes during
+## a race: the type, the settings, and the starting input values. Rebuilding the
+## settings for every node on every tick meant a dictionary copy and a merge per
+## node — five hundred of each per tick with a full grid.
+var _types: Dictionary = {}
+var _configs: Dictionary = {}
+var _defaults: Dictionary = {}
+## A node whose shape depends on its config would otherwise rebuild its whole
+## port list on every tick — and a Ray node does exactly that. The config is
+## settled, so the ports are too.
+var _out_ports: Dictionary = {}
 var _state: Dictionary = {}             # node id -> that node's memory
 var _outputs: Dictionary = {}           # node id -> its outputs this tick
 
@@ -28,10 +39,21 @@ static func create(graph: BrainGraph, registry: NodeRegistry) -> BrainEvaluator:
 		elif t.role == NodeType.Role.MEMORY:
 			e._memory_ids.append(inst.id)
 
+	for inst: BrainGraph.Instance in graph.instances.values():
+		var type := registry.get_type(inst.type_id)
+		if type == null:
+			continue
+		var merged: Dictionary = type.config_defaults.duplicate()
+		merged.merge(inst.config, true)
+		e._types[inst.id] = type
+		e._configs[inst.id] = merged
+		e._defaults[inst.id] = type.input_defaults(merged)
+		e._out_ports[inst.id] = type.outputs_for(merged)
+		e._incoming[inst.id] = [] as Array[BrainGraph.Wire]
+
 	for w: BrainGraph.Wire in graph.wires:
-		if not e._incoming.has(w.to_node):
-			e._incoming[w.to_node] = [] as Array[BrainGraph.Wire]
-		e._incoming[w.to_node].append(w)
+		if e._incoming.has(w.to_node):
+			e._incoming[w.to_node].append(w)
 
 	e.reset()
 	return e
@@ -52,21 +74,24 @@ func tick(snapshot: SensorSnapshot) -> CarControls:
 	# 1. Senses. Fixed numbers for this tick, before any maths happens.
 	for id: StringName in _sensor_ids:
 		var t := _type_of(id)
-		_outputs[id] = _clean(t, t.sense.call(snapshot, _config_of(id)))
+		var sensor_config: Dictionary = _configs[id]
+		_outputs[id] = _clean(id, t.sense.call(snapshot, sensor_config))
 
 	# 2. Memory reports LAST tick's numbers. Together with step 1 this means every
 	#    source is known up front, which is what lets a loop resolve.
 	for id: StringName in _memory_ids:
 		var t := _type_of(id)
-		_outputs[id] = _clean(t, t.emit.call(_state[id], _config_of(id)))
+		var memory_config: Dictionary = _configs[id]
+		_outputs[id] = _clean(id, t.emit.call(_state[id], memory_config))
 
 	# 3. Everything else, once each, in dependency order.
 	for id: StringName in _order:
 		var t := _type_of(id)
+		var config: Dictionary = _configs[id]
 		if t.role == NodeType.Role.OUTPUT:
-			t.write.call(_gather(id), _config_of(id), controls)
+			t.write.call(_gather(id), config, controls)
 		else:
-			_outputs[id] = _clean(t, t.eval.call(_gather(id), _config_of(id)))
+			_outputs[id] = _clean(id, t.eval.call(_gather(id), config))
 
 	# 4. Memory swallows this tick's inputs, ready for the next one.
 	for id: StringName in _memory_ids:
@@ -82,8 +107,8 @@ func output_of(node_id: StringName, port_id: StringName) -> float:
 ## Every input starts at its declared default, then wires overwrite the ones they
 ## reach. That is why an unconnected input can never be missing.
 func _gather(node_id: StringName) -> Dictionary:
-	var inp: Dictionary = _type_of(node_id).input_defaults()
-	for w: BrainGraph.Wire in _incoming.get(node_id, []):
+	var inp: Dictionary = (_defaults[node_id] as Dictionary).duplicate()
+	for w: BrainGraph.Wire in _incoming[node_id]:
 		var source: Dictionary = _outputs.get(w.from_node, {})
 		if source.has(w.from_port):
 			inp[w.to_port] = source[w.from_port]
@@ -91,9 +116,9 @@ func _gather(node_id: StringName) -> Dictionary:
 
 ## Forces every output into its declared range, and NaN to zero. A broken brain
 ## drives badly; it does not get to take the race down with it (spec 3.3).
-func _clean(type: NodeType, raw: Dictionary) -> Dictionary:
+func _clean(node_id: StringName, raw: Dictionary) -> Dictionary:
 	var out: Dictionary = {}
-	for p: Port in type.outputs:
+	for p: Port in _out_ports[node_id]:
 		if p.kind == Port.Kind.VECTOR:
 			out[p.id] = _clean_vector(raw.get(p.id, []), p)
 		else:
@@ -116,10 +141,9 @@ static func _clean_vector(raw: Variant, p: Port) -> Array[float]:
 	return values
 
 func _type_of(node_id: StringName) -> NodeType:
-	return _registry.get_type(_graph.instances[node_id].type_id)
+	return _types[node_id]
 
-## Node settings, with anything the author did not set falling back to the type default.
+## Node settings, with anything the author did not set falling back to the type
+## default. Settled when the evaluator was built; a race cannot change them.
 func _config_of(node_id: StringName) -> Dictionary:
-	var merged: Dictionary = _type_of(node_id).config_defaults.duplicate()
-	merged.merge(_graph.instances[node_id].config, true)
-	return merged
+	return _configs[node_id]

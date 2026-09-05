@@ -20,13 +20,18 @@ func test_ray_node_reads_the_ray_it_was_configured_for() -> void:
 	assert_almost_eq(e.output_of(&"r", &"hit_car"), 1.0, 1e-6, "booleans travel as 1.0")
 	assert_almost_eq(e.output_of(&"r", &"hit_track"), 0.0)
 
-func test_a_ray_index_that_does_not_exist_reads_as_clear() -> void:
+func test_a_silly_ray_index_wraps_rather_than_reading_clear() -> void:
 	# The index comes out of a brain file, so it cannot be trusted to be sane.
+	# It wraps to a real ray on purpose: reporting "nothing there" would tell the
+	# brain the road ahead is open, which is the dangerous way to be wrong.
+	var snapshot := SensorSnapshot.blank()
+	snapshot.ray_distance[3] = 0.2   # ring 3
+
 	var g := BrainGraph.new()
-	g.add_node(&"r", &"ray", { &"index": 999.0 })
+	g.add_node(&"r", &"ray", { &"arc": "ring", &"index": 11.0 })  # 11 wraps to 3
 	var e := BrainEvaluator.create(g, _registry())
-	e.tick(SensorSnapshot.blank())
-	assert_almost_eq(e.output_of(&"r", &"distance"), 1.0, 1e-6, "nothing hit, not a crash")
+	e.tick(snapshot)
+	assert_almost_eq(e.output_of(&"r", &"distance"), 0.2, 1e-6, "wrapped to a real reading")
 
 func test_checkpoint_angle_is_measured_from_straight_ahead() -> void:
 	var snapshot := SensorSnapshot.blank()

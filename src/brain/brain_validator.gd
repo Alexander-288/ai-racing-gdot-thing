@@ -142,8 +142,9 @@ static func _check_wire(w: BrainGraph.Wire, graph: BrainGraph, registry: NodeReg
 	if from_type == null or to_type == null:
 		return errors  # already reported as an unknown type
 
-	var from_port := _find_port(from_type.outputs, w.from_port)
-	var to_port := _find_port(to_type.inputs, w.to_port)
+	# Ports are asked for with the node's own config, because some nodes grow.
+	var from_port := _find_port(from_type.outputs_for(_merged_config(from_type, graph.instances[w.from_node])), w.from_port)
+	var to_port := _find_port(to_type.inputs_for(_merged_config(to_type, graph.instances[w.to_node])), w.to_port)
 	if from_port == null:
 		errors.append("%s: '%s' has no output called '%s'" % [label, w.from_node, w.from_port])
 	if to_port == null:

@@ -111,6 +111,14 @@ much higher top speed and much less grip.
 Deferred to later: slipstream, weather, tyre wear. DRS has no activation zones or
 one-second rule yet for the same reason — both need slipstream.
 
-Fourteen cars cost 14.8 ms a tick against a 16.6 ms budget, down from 27.1 ms.
+Rays are named by set and index rather than a flat number: a **ring** of eight
+looking all the way round, and a **cone** of six looking forward. Six is even, so
+the cone is symmetric with no ray on the nose — dead ahead is the ring's first
+ray, and duplicating it would waste one of the six.
+
+One Ray node carries up to eight readings. The + and - on the node add and remove
+them, each with its own set and index.
+
+Fourteen cars cost 13.4 ms a tick against a 16.6 ms budget, down from 27.1 ms.
 
 Next: Phase 4 — headless batch racing, self-play and telemetry.

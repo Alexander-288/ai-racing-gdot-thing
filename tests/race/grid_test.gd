@@ -194,10 +194,10 @@ func test_a_ray_reports_a_car_rather_than_the_wall_behind_it() -> void:
 	them.heading = me.heading
 
 	var snapshot := SensorBuilder.build(me, track, [me, them], 0)
-	# Ray 10 points dead ahead.
-	assert_true(snapshot.ray_hit_car[10], "should see the car")
-	assert_false(snapshot.ray_hit_track[10], "the car hides the wall behind it")
-	assert_almost_eq(snapshot.ray_distance[10] * SensorBuilder.RAY_RANGE,
+	# Ring ray 0 points dead ahead.
+	assert_true(snapshot.ray_hit_car[0], "should see the car")
+	assert_false(snapshot.ray_hit_track[0], "the car hides the wall behind it")
+	assert_almost_eq(snapshot.ray_distance[0] * SensorBuilder.RAY_RANGE,
 		12.0 - Car.RADIUS, 0.3, "and report the near edge of it")
 
 func test_rays_ignore_the_car_casting_them() -> void:

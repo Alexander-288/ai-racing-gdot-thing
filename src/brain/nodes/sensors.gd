@@ -2,8 +2,16 @@ class_name SensorNodes
 ## The brain's senses. All of these are sources: they have no inputs, and their
 ## numbers are ready before any maths runs on a tick.
 
-## One ray. Separate boolean sockets rather than a magic number for the hit type,
-## so the telemetry overlay stays readable and the editor stays memorable (spec 2.5).
+## Rays. One node can carry one reading or eight — the editor grows it a segment
+## at a time, and each segment picks its own ray.
+##
+## A ray is named by which set it belongs to and which one of that set: the ring
+## of eight that looks all the way round, or the cone of six that looks forward.
+## That beats a single flat number, because "cone 2" means something to a person
+## reading a brain file and "ray 10" does not.
+##
+## Separate boolean sockets rather than a magic number for the hit type, so the
+## telemetry overlay stays readable and the editor stays memorable (spec 2.5).
 static func ray() -> NodeType:
 	var t := NodeType.new()
 	t.id = &"ray"
@@ -11,24 +19,62 @@ static func ray() -> NodeType:
 	t.category = "Sensors"
 	t.role = NodeType.Role.SENSOR
 
-	t.config_defaults = { &"index": 0.0 }  # which of the car's rays to read
-	t.outputs = [
-		Port.make_output(&"distance", "Distance", 0.0, 1.0),
-		Port.make_output(&"hit_track", "Hit Track", 0.0, 1.0, Port.Kind.BOOL),
-		Port.make_output(&"hit_car", "Hit Car", 0.0, 1.0, Port.Kind.BOOL),
-		Port.make_output(&"hit_object", "Hit Object", 0.0, 1.0, Port.Kind.BOOL),
-	]
+	# What the + and - on the node change.
+	t.grow_key = &"segments"
+	t.grow_min = 1
+	t.grow_max = 8
+
+	# Only the first segment's settings are defaults; the rest are written by the
+	# editor as segments are added, and read with a fallback if they are missing.
+	t.config_defaults = { &"segments": 1.0, &"arc": "ring", &"index": 0.0 }
+
+	t.shape_for = func(cfg: Dictionary) -> Dictionary:
+		var outputs: Array[Port] = []
+		var fields: Array[ConfigField] = []
+		for i in _segment_count(cfg):
+			var tail := _segment_suffix(i)
+			var shown := _segment_label(i)
+			outputs.append(Port.make_output(StringName("distance" + tail), "Distance" + shown, 0.0, 1.0))
+			outputs.append(Port.make_output(StringName("hit_track" + tail), "Track" + shown, 0.0, 1.0, Port.Kind.BOOL))
+			outputs.append(Port.make_output(StringName("hit_car" + tail), "Car" + shown, 0.0, 1.0, Port.Kind.BOOL))
+			outputs.append(Port.make_output(StringName("hit_object" + tail), "Object" + shown, 0.0, 1.0, Port.Kind.BOOL))
+
+			# The index only goes as far as the chosen set has rays, so a cone
+			# cannot be asked for a seventh ray it does not have.
+			var arc := _segment_arc(cfg, i)
+			fields.append(ConfigField.choice(StringName("arc" + tail), "arc" + shown, ["ring", "cone"]))
+			fields.append(ConfigField.number(StringName("index" + tail), "ray" + shown,
+				0.0, float(SensorSnapshot.rays_in(arc) - 1), 1.0))
+		return { &"inputs": [] as Array[Port], &"outputs": outputs, &"fields": fields }
 
 	t.sense = func(snapshot: SensorSnapshot, cfg: Dictionary) -> Dictionary:
-		var r := snapshot.ray_at(int(cfg[&"index"]))
-		return {
-			&"distance": r[&"distance"],
-			&"hit_track": 1.0 if r[&"hit_track"] else 0.0,
-			&"hit_car": 1.0 if r[&"hit_car"] else 0.0,
-			&"hit_object": 1.0 if r[&"hit_object"] else 0.0,
-		}
+		var out: Dictionary = {}
+		for i in _segment_count(cfg):
+			var tail := _segment_suffix(i)
+			var index := int(cfg.get(StringName("index" + tail), 0))
+			var reading := snapshot.ray_at(SensorSnapshot.flat_ray(_segment_arc(cfg, i), index))
+			out[StringName("distance" + tail)] = reading[&"distance"]
+			out[StringName("hit_track" + tail)] = 1.0 if reading[&"hit_track"] else 0.0
+			out[StringName("hit_car" + tail)] = 1.0 if reading[&"hit_car"] else 0.0
+			out[StringName("hit_object" + tail)] = 1.0 if reading[&"hit_object"] else 0.0
+		return out
 
 	return t
+
+## Segment 0 keeps the plain names, so a one-ray node reads exactly as it always
+## did and brain files written before the node could grow still load.
+static func _segment_suffix(i: int) -> String:
+	return "" if i == 0 else "_%d" % i
+
+static func _segment_label(i: int) -> String:
+	return "" if i == 0 else " %d" % (i + 1)
+
+static func _segment_count(cfg: Dictionary) -> int:
+	return clampi(int(cfg.get(&"segments", 1)), 1, 8)
+
+static func _segment_arc(cfg: Dictionary, i: int) -> StringName:
+	var named := StringName(str(cfg.get(StringName("arc" + _segment_suffix(i)), "ring")))
+	return named if SensorSnapshot.RAY_SETS.has(named) else &"ring"
 
 ## The whole eight-ray ring as two bundles instead of eight separate Ray nodes
 ## and the wires to go with them (spec 2.8). Same numbers, one wire.
@@ -135,6 +181,11 @@ static func radar() -> NodeType:
 	# Which rival to watch. Stored as text so a brain file says "ahead" rather
 	# than a magic number nobody can read.
 	t.config_defaults = { &"target": "closest" }
+	# A dropdown of the rules, so a brain file names one rather than numbering it.
+	var modes: Array[String] = []
+	for mode: StringName in SensorSnapshot.RADAR_MODES:
+		modes.append(String(mode))
+	t.config_fields = [ConfigField.choice(&"target", "watch", modes)]
 	t.outputs = [
 		Port.make_output(&"found", "Found", 0.0, 1.0, Port.Kind.BOOL),
 		Port.make_output(&"right", "Right"),

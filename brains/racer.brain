@@ -25,12 +25,15 @@ node cp checkpoint
 node me self_state
 
 node fwd ray
-    index = 10.0
+    arc = "ring"
+    index = 0.0
 
 node left ray
+    arc = "ring"
     index = 7.0
 
 node right ray
+    arc = "ring"
     index = 1.0
 
 node cpg constant

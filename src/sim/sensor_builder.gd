@@ -6,20 +6,31 @@ class_name SensorBuilder
 const RAY_RANGE := 60.0          # how far a ray can see, in metres
 const CHECKPOINTS_VISIBLE := 4   # how far ahead a brain may look
 
-## Directions for the 6 aimable rays, as angles from straight ahead. Fixed here
-## for now; these become per-brain configuration once the editor exists.
-const AIMED_ANGLES: Array[float] = [-0.35, -0.15, 0.0, 0.15, 0.35, PI]
+## How wide the forward cone opens, either side of the nose.
+const CONE_HALF_ANGLE := 0.30  # radians, about 17 degrees
+
+## The six cone rays, as angles from straight ahead. Evenly spread and symmetric,
+## and because there are six of them none sits at zero — the nose falls between
+## the middle pair. Straight ahead is the ring's first ray.
+static func cone_angles() -> Array[float]:
+	var angles: Array[float] = []
+	var count := SensorSnapshot.CONE_RAYS
+	var step := CONE_HALF_ANGLE * 2.0 / float(count - 1)
+	for i in count:
+		angles.append((float(i) - float(count - 1) * 0.5) * step)
+	return angles
 
 ## Where every ray points, as angles from straight ahead. One list, used both to
 ## cast the rays and to draw them, so the picture can never disagree with what
 ## the brain was actually told.
 static func ray_angles() -> Array[float]:
 	var angles: Array[float] = []
-	# The 8-ray ring: fixed, evenly spaced, identical for every car so the
-	# competition measures thinking rather than provisioning (spec 2.5).
+	# The ring first, then the cone, matching the flat order the snapshot uses.
+	# Fixed and identical for every car, so the competition measures thinking
+	# rather than provisioning (spec 2.5).
 	for i in SensorSnapshot.RING_RAYS:
 		angles.append(TAU * float(i) / float(SensorSnapshot.RING_RAYS))
-	angles.append_array(AIMED_ANGLES)
+	angles.append_array(cone_angles())
 	return angles
 
 ## `others` is the whole field including this car; `self_index` says which one is
