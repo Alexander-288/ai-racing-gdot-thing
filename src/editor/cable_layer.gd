@@ -81,12 +81,15 @@ func strands() -> Array[Dictionary]:
 		var spine := canvas.spine(from, to)
 		var colours := CableStyle.strand_colours(kind)
 		var width := CableStyle.strand_width(kind)
+		# Where a cable runs is scaled one for one — it has to land on its socket.
+		# How thick it is drawn is not; see CableStyle.zoom_scale.
+		var thickness := CableStyle.zoom_scale(canvas.zoom)
 		var index := 0
 		for offset: float in CableStyle.offsets(kind):
 			out.append({
-				"points": BrainCanvas.offset_curve(spine, offset * canvas.zoom),
+				"points": BrainCanvas.offset_curve(spine, offset * thickness),
 				"colour": colours[index],
-				"width": width * canvas.zoom,
+				"width": width * thickness,
 			})
 			index += 1
 	return out

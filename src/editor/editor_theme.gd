@@ -45,6 +45,22 @@ const BAD         := Color("ff9c8f")
 ## Corner radius used by every rounded box, so nothing drifts out of family.
 const RADIUS := 6
 
+## How many texels every hand-drawn icon holds per pixel it is shown at.
+##
+## GraphEdit zooms by scaling its children, not by redrawing them, so a texture
+## with one texel per pixel has nothing left to show when magnified except its
+## own texels. The spare resolution here is what it magnifies into instead — four
+## covers the whole zoom range (BrainEditor sets zoom_max to 3).
+const SUPERSAMPLE := 4
+
+## How wide the soft edge of a stylebox is, in the box's own units.
+##
+## Same problem, other half: Godot's default of one unit is one pixel at life
+## size but a three-pixel gradient at zoom 3, which is what made the node boxes
+## read as fuzzy rather than as magnified. Half a unit still looks clean at life
+## size and stays a hairline when zoomed.
+const EDGE_SOFTNESS := 0.5
+
 ## A tint per role. Used as title *text*, and as a whisper of colour behind the
 ## title bar — a node should be identifiable without shouting.
 const ROLE_COLOURS := {
@@ -69,42 +85,68 @@ const KIND_COLOURS := {
 static func role_colour(role: int) -> Color:
 	return ROLE_COLOURS.get(role, TEXT)
 
+## Bakes a hand-drawn image into a texture that reports a smaller size than it
+## actually holds. Everything laying the editor out sees the small size, so no
+## layout changes; the canvas has the extra texels to draw from when you zoom in,
+## and the mipmaps stop them shimmering when you zoom out.
+static func _baked(img: Image, logical: Vector2i) -> ImageTexture:
+	img.generate_mipmaps()
+	var tex := ImageTexture.create_from_image(img)
+	tex.set_size_override(logical)
+	return tex
+
+## Every node in a graph asks for a dot, but there are only as many answers as
+## there are role colours — and at SUPERSAMPLE the drawing loop is sixteen times
+## the work it used to be. So the answers are kept.
+static var _dots: Dictionary = {}
+
 ## A small filled circle, drawn rather than imported so the editor still needs no
-## art files. One texel per screen pixel: a texture drawn bigger than it is shown
-## has to be resampled, and resampling is what made these look soft and uneven.
-## The soft edge is one pixel wide, which is all the antialiasing a circle this
-## small needs.
+## art files. The soft edge is one texel wide, which after the downscale to its
+## shown size is all the antialiasing a circle this small needs.
 static func dot(colour: Color, size: int = 10) -> ImageTexture:
-	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var key := "%s@%d" % [colour.to_html(true), size]
+	if _dots.has(key):
+		return _dots[key]
+
+	var pixels := size * SUPERSAMPLE
+	var img := Image.create(pixels, pixels, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
-	var r := size * 0.5
-	for y in size:
-		for x in size:
+	var r := pixels * 0.5
+	for y in pixels:
+		for x in pixels:
 			var edge := r - Vector2(x + 0.5 - r, y + 0.5 - r).length()
 			if edge > 0.0:
 				img.set_pixel(x, y, Color(colour, minf(edge, 1.0)))
-	return ImageTexture.create_from_image(img)
+
+	var tex := _baked(img, Vector2i(size, size))
+	_dots[key] = tex
+	return tex
 
 ## A socket. Not a dot: a small rounded rectangle, so a port reads as a connector
 ## you plug into rather than a full stop. Godot tints this icon with the slot's
 ## colour, so it is drawn white — and the brightness falling off towards the
 ## bottom survives that tinting as a shade across the connector.
+## GraphNode will only take a Texture2D here, so unlike the dot this one cannot
+## be swapped for something drawn live — which is exactly what _baked is for.
 static func connector(width: int = 14, height: int = 8, radius: float = 3.0) -> ImageTexture:
-	var img := Image.create(width, height, false, Image.FORMAT_RGBA8)
+	var w := width * SUPERSAMPLE
+	var h := height * SUPERSAMPLE
+	var r := radius * SUPERSAMPLE
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
-	var half := Vector2(width, height) * 0.5
-	for y in height:
-		for x in width:
+	var half := Vector2(w, h) * 0.5
+	for y in h:
+		for x in w:
 			# Distance to a rounded rectangle: measure to the inner box, then
 			# subtract the corner radius. Negative is inside.
 			var from_middle := (Vector2(x + 0.5, y + 0.5) - half).abs()
-			var corner := from_middle - (half - Vector2(radius, radius))
-			var distance := Vector2(maxf(corner.x, 0.0), maxf(corner.y, 0.0)).length() - radius
+			var corner := from_middle - (half - Vector2(r, r))
+			var distance := Vector2(maxf(corner.x, 0.0), maxf(corner.y, 0.0)).length() - r
 			var alpha := clampf(-distance, 0.0, 1.0)
 			if alpha > 0.0:
-				var shade := lerpf(1.0, 0.68, y / maxf(height - 1.0, 1.0))
+				var shade := lerpf(1.0, 0.68, y / maxf(h - 1.0, 1.0))
 				img.set_pixel(x, y, Color(shade, shade, shade, alpha))
-	return ImageTexture.create_from_image(img)
+	return _baked(img, Vector2i(width, height))
 
 # ---------------------------------------------------------------- the pieces
 
@@ -115,6 +157,7 @@ static func box(fill: Color, radius: int = RADIUS, edge: Color = Color(0, 0, 0, 
 	var s := StyleBoxFlat.new()
 	s.bg_color = fill
 	s.set_corner_radius_all(radius)
+	s.anti_aliasing_size = EDGE_SOFTNESS
 	if edge_width > 0:
 		s.set_border_width_all(edge_width)
 		s.border_color = edge
@@ -129,6 +172,7 @@ static func box(fill: Color, radius: int = RADIUS, edge: Color = Color(0, 0, 0, 
 static func top_box(fill: Color, edge: Color, edge_width: int = 1) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
 	s.bg_color = fill
+	s.anti_aliasing_size = EDGE_SOFTNESS
 	s.corner_radius_top_left = RADIUS
 	s.corner_radius_top_right = RADIUS
 	s.border_color = edge
@@ -150,6 +194,7 @@ static func top_box(fill: Color, edge: Color, edge_width: int = 1) -> StyleBoxFl
 static func bottom_box(fill: Color, edge: Color, edge_width: int = 1) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
 	s.bg_color = fill
+	s.anti_aliasing_size = EDGE_SOFTNESS
 	s.corner_radius_bottom_left = RADIUS
 	s.corner_radius_bottom_right = RADIUS
 	s.border_color = edge
@@ -174,17 +219,15 @@ static func tray_box(colour_index: int, selected: bool) -> StyleBoxFlat:
 ## The little six-dot grip that a tray is dragged by. Drawn, like everything else
 ## in this editor, so there is still no art folder to keep in step with the code.
 static func grip(colour: Color) -> ImageTexture:
-	var img := Image.create(9, 14, false, Image.FORMAT_RGBA8)
+	var img := Image.create(9 * SUPERSAMPLE, 14 * SUPERSAMPLE, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
 	for row in 3:
 		for column in 2:
-			var x := 1 + column * 5
-			var y := 2 + row * 4
-			img.set_pixel(x, y, colour)
-			img.set_pixel(x + 1, y, colour)
-			img.set_pixel(x, y + 1, colour)
-			img.set_pixel(x + 1, y + 1, colour)
-	return ImageTexture.create_from_image(img)
+			# The dots are 2x2 at the size this is shown at, so they are drawn as
+			# rectangles now rather than as four named pixels.
+			img.fill_rect(Rect2i((1 + column * 5) * SUPERSAMPLE, (2 + row * 4) * SUPERSAMPLE,
+				2 * SUPERSAMPLE, 2 * SUPERSAMPLE), colour)
+	return _baked(img, Vector2i(9, 14))
 
 static func empty(margin: int = 0) -> StyleBoxEmpty:
 	var s := StyleBoxEmpty.new()

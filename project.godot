@@ -33,6 +33,14 @@ gdscript/warnings/unsafe_method_access=1
 gdscript/warnings/unsafe_cast=1
 gdscript/warnings/integer_division=2
 
+[gui]
+
+; Glyphs are stored as a signed distance field and rebuilt in the shader at
+; whatever scale they end up drawn at, rather than blitted from an atlas baked at
+; one size. GraphEdit zooms by scaling its children, so without this the node
+; text is a magnified bitmap the moment you go past life size.
+theme/default_font_multichannel_signed_distance_field=true
+
 [physics]
 
 common/physics_jitter_fix=0.0

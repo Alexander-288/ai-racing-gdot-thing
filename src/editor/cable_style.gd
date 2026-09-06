@@ -40,6 +40,21 @@ const FLOW_SPEED := 55.0     # pixels a second, at zoom 1
 const FLOW_LENGTH := 190.0   # how far apart the bands are
 const FLOW_LIFT := 0.30      # how much brighter the crest is than the trough
 
+## How much thicker a cable gets as you zoom in — and it is not simply the zoom.
+##
+## A cable scaled one for one is a 0.4px thread at the far end of the zoom range
+## and a 4px rope at the near end: the first aliases into flicker, the second
+## stops reading as a wire and starts reading as a pipe. Raising the zoom to a
+## power below one keeps the change legible at both ends — at zoom 3 a strand
+## comes out a little over twice its resting width rather than three times.
+##
+## Strand spacing is scaled by the same number, so the loom keeps its proportions
+## instead of the strands merging when thin or splaying apart when fat.
+const WIDTH_RESPONSE := 0.6
+
+static func zoom_scale(zoom: float) -> float:
+	return pow(zoom, WIDTH_RESPONSE)
+
 ## The tint of one point along a cable, given how far along it sits and how long
 ## the animation has been running.
 static func flowing(base: Color, distance: float, clock: float) -> Color:

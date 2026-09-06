@@ -110,9 +110,11 @@ func _build_ui() -> void:
 	# ordinary wire the single core covers it completely.
 	_canvas.connection_lines_thickness = CableStyle.BACKING_WIDTH
 	_canvas.connection_lines_antialiased = true
-	# The sockets and dots are drawn at one texel per pixel, so magnifying far
-	# past life size only magnifies their pixels. This is where that stops.
-	_canvas.zoom_max = 1.5
+	# The sockets, dots and grips hold four texels per pixel they are shown at
+	# (EditorTheme.SUPERSAMPLE) and the text is rebuilt from a distance field, so
+	# magnifying past life size now magnifies the drawing rather than its pixels.
+	# Three is where that spare resolution runs out.
+	_canvas.zoom_max = 3.0
 	# The minimap earns its place on a big brain, but only as a quiet corner of
 	# the canvas rather than a bright grey slab sitting on top of it.
 	_canvas.minimap_size = Vector2(140, 90)
