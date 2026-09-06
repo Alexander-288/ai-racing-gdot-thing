@@ -22,8 +22,13 @@ var _carried: Dictionary = {}
 ## Save overwrites it and only Save As asks again.
 ## How the next Test Drive is set up. Kept on the editor rather than asked for
 ## each time, so trying a change is one click.
-var grid_size: int = 1
 var track_seed: int = 0  # 0 is the hand-tuned circuit; anything else is generated
+
+## Who is on the grid, as brain file paths in starting order. An empty string is
+## whatever brain is open in the editor, so the roster does not go stale as you
+## work on it. Remembered between races, because setting a grid up is fiddly and
+## you usually want to run it again with one thing changed.
+var roster: Array[String] = [""]
 
 var _current_path: String = ""
 var _unsaved := false
@@ -165,29 +170,13 @@ func _build_palette() -> void:
 	tray_entry.icon = EditorTheme.dot(EditorTheme.TRAY_TITLE, 9)
 	_palette.add_child(tray_entry)
 
-## How many cars, and on what. A field of one is a lap on your own; a full grid
-## is fourteen copies of this same brain, which is what self-play looks like from
-## the outside — the race manager does not care that they are all the same brain.
+## The track to race on, and a way in to the grid. Setting up who is racing is a
+## job of its own, so it gets a window rather than a corner of the sidebar.
 func _race_setup() -> VBoxContainer:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 2)
 
-	var cars_row := HBoxContainer.new()
-	var cars_label := Label.new()
-	cars_label.text = "cars"
-	cars_label.theme_type_variation = &"CategoryLabel"
-	cars_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cars_row.add_child(cars_label)
-
-	var cars := SpinBox.new()
-	cars.min_value = 1
-	cars.max_value = 14
-	cars.step = 1
-	cars.value = grid_size
-	cars.custom_minimum_size.x = 70
-	cars.value_changed.connect(func(v: float) -> void: grid_size = int(v))
-	cars_row.add_child(cars)
-	box.add_child(cars_row)
+	box.add_child(_button("Grid...", _on_grid))
 
 	var track_row := HBoxContainer.new()
 	var track_label := Label.new()
@@ -209,6 +198,29 @@ func _race_setup() -> VBoxContainer:
 	box.add_child(track_row)
 
 	return box
+
+## Opens the grid. Everything about who is racing is decided in there; this only
+## hands over what is open now and takes back a field to start.
+func _on_grid() -> void:
+	var dialog := GridDialog.open(registry, graph, graph.name, track_seed, roster)
+	dialog.cancelled.connect(func() -> void: _close_dialog(dialog))
+	dialog.start_requested.connect(func(chosen: Array, seed: int) -> void:
+		var kept: Array[String] = []
+		for path: String in chosen:
+			kept.append(path)
+		roster = kept
+		track_seed = seed
+		var field := dialog.build_field()
+		_close_dialog(dialog)
+		if field.is_empty():
+			_problems.text = "[color=#ff9c8f]a car on the grid will not load[/color]"
+			return
+		_open_race(field))
+	add_child(dialog)
+
+func _close_dialog(dialog: GridDialog) -> void:
+	remove_child(dialog)
+	dialog.queue_free()
 
 func chosen_track() -> Track:
 	return Track.grand_prix() if track_seed == 0 else Track.generated(track_seed)
@@ -545,11 +557,10 @@ func _on_test_drive() -> void:
 		_revalidate()
 		return  # a brain with problems is not worth watching drive
 
-	# Every car gets its own copy, because each needs its own node state — two
-	# cars sharing one graph would share one accumulator.
-	var field: Array = []
-	for i in grid_size:
-		field.append(BrainFormat.parse(BrainFormat.serialize(graph)).graph)
+	_open_race([BrainFormat.parse(BrainFormat.serialize(graph)).graph])
+
+## Puts a field on the track and watches it.
+func _open_race(field: Array) -> void:
 	var view := DebugView.open_field(field, registry, chosen_track())
 	view.closed.connect(func() -> void:
 		remove_child(view)

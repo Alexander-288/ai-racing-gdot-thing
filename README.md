@@ -84,11 +84,14 @@ oval in a top-down wireframe: track edges, checkpoints, the car, and its 14 rays
 from the same angle list the sensors use — so the picture cannot disagree with what the
 brain was told. Pause, Step, Reset, 1x/5x/20x, and Watch next to follow a different car.
 
-The sidebar sets up the session: how many cars, and which track. A field is that
-many copies of the open brain, so self-play is a spinner rather than a feature —
-the race manager does not care that they are all the same brain. Tracks are the
-hand-tuned circuit or one of the generated seeds, which is the quickest way to
-find out whether a brain works anywhere but home. Speeding up runs more ticks per
+**Grid...** opens the field: a row per car, each picking its own brain from the
+ones that ship with the game, the ones you have saved, or the brain open in the
+editor. Add and remove cars, fill the grid, choose a track. A brain that will not
+load or will not validate is named before the race starts rather than during it.
+
+Racing copies of one brain is self-play; racing different ones is the only way to
+find out whether a brain can overtake, defend, or survive contact with a driver
+that behaves differently. Speeding up runs more ticks per
 frame, never bigger ticks, so it stays deterministic.
 
 The wireframe is an instrument, not the graphical suite. Cel shading, cameras and the
