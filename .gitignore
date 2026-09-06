@@ -17,3 +17,14 @@ tools/godot/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Scratch: throwaway probe scripts and screenshots taken while working
+probe_*.gd
+probe_*.gd.uid
+shot*.png
+shot*.gd
+shot*.gd.uid
+crop*.png
+cull_*.png
+*.png.import
+!icon.svg.import

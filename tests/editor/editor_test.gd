@@ -454,3 +454,168 @@ func test_saving_somewhere_impossible_reports_rather_than_pretends() -> void:
 	assert_false(editor.save_to("user://nope/nowhere/at/all/x.brain"))
 	assert_eq(editor._current_path, "", "a failed save must not claim the file")
 	_close(editor)
+
+# ------------------------------------------------------------------ layout
+
+func test_a_saved_layout_comes_back_exactly() -> void:
+	var editor := _open()
+	editor.load_file("res://brains/racer.brain")
+	editor.graph.instances[&"cp"].position = Vector2(137.0, 251.0)
+	editor.graph.instances[&"cp"].placed = true
+	editor.graph.instances[&"me"].position = Vector2.ZERO      # deliberately the origin
+	editor.graph.instances[&"me"].placed = true
+	editor.graph.instances[&"steer"].position = Vector2(-88.5, 640.25)
+	editor.graph.instances[&"steer"].placed = true
+	editor.save_to(_scratch("layout.brain"))
+
+	var reopened := _open()
+	reopened.load_file(_scratch("layout.brain"))
+	assert_eq(reopened.graph.instances[&"cp"].position, Vector2(137.0, 251.0))
+	assert_eq(reopened.graph.instances[&"me"].position, Vector2.ZERO,
+		"a node left at the origin is left at the origin")
+	assert_eq(reopened.graph.instances[&"steer"].position, Vector2(-88.5, 640.25))
+	_close(editor)
+	_close(reopened)
+
+func test_laying_out_a_hand_written_brain_marks_it_placed() -> void:
+	# Otherwise the automatic layout would run again on every rebuild and the
+	# graph would rearrange itself while you worked on it.
+	var editor := _open()
+	editor.load_file("res://brains/follower.brain")
+	for inst: BrainGraph.Instance in editor.graph.instances.values():
+		assert_true(inst.placed, "%s was drawn without being placed" % inst.id)
+	_close(editor)
+
+func test_moving_a_node_is_remembered() -> void:
+	var editor := _open()
+	editor.graph.add_node(&"c", &"constant", {}, Vector2(10.0, 10.0))
+	editor._rebuild_canvas()
+	for child: Node in _canvas(editor).get_children():
+		if child is NodeView:
+			(child as NodeView).position_offset = Vector2(400.0, 300.0)
+	editor._on_moved()
+	assert_eq(editor.graph.instances[&"c"].position, Vector2(400.0, 300.0))
+	_close(editor)
+
+func test_a_grown_ray_node_keeps_each_segments_settings_with_its_sockets() -> void:
+	# Four sockets per segment and two settings, so the settings belong on the
+	# first two rows of their own segment. Left as a plain list they drifted, and
+	# by the fourth segment the arc selector sat beside another segment's sockets.
+	var editor := _open()
+	editor.graph.add_node(&"r", &"ray", { &"segments": 3.0 })
+	editor._rebuild_canvas()
+
+	var view := _ray_view(editor)
+	var rows: Array[Node] = []
+	for child: Node in view.get_children():
+		if child is HBoxContainer:
+			rows.append(child)
+
+	# Row 0 and row 4 open a segment each, so both carry a dropdown.
+	for opening_row: int in [0, 4, 8]:
+		var cell: Node = rows[opening_row].get_child(0)
+		var has_choice := false
+		for widget: Node in cell.get_children():
+			if widget is OptionButton:
+				has_choice = true
+		assert_true(has_choice, "row %d should start a segment with its arc selector" % opening_row)
+
+	# The rows that carry no setting are the third and fourth of each segment.
+	for empty_row: int in [2, 3, 6, 7]:
+		assert_eq(rows[empty_row].get_child(0).get_child_count(), 0,
+			"row %d should be blank on the left" % empty_row)
+	_close(editor)
+
+# ------------------------------------------------------------------ growing nodes
+
+func _ray_view(editor: BrainEditor) -> NodeView:
+	for child: Node in _canvas(editor).get_children():
+		if child is NodeView and (child as NodeView).node_id == &"r":
+			return child
+	return null
+
+func test_a_ray_node_is_drawn_with_a_grow_footer() -> void:
+	var editor := _open()
+	editor.graph.add_node(&"r", &"ray")
+	editor._rebuild_canvas()
+
+	var buttons: Array[String] = []
+	for row: Node in _ray_view(editor).get_children():
+		for cell: Node in row.get_children():
+			if cell is Button and not (cell is OptionButton):
+				buttons.append((cell as Button).text)
+	assert_true(buttons.has("+"), "a node that can grow needs a way to grow")
+	assert_true(buttons.has("-"), "and a way to shrink")
+	_close(editor)
+
+func test_growing_a_node_gives_it_more_sockets() -> void:
+	var editor := _open()
+	editor.graph.add_node(&"r", &"ray")
+	editor._rebuild_canvas()
+	assert_eq(_ray_view(editor).output_ports.size(), 4)
+
+	editor._on_shape_changed(&"r", 3)
+	assert_eq(_ray_view(editor).output_ports.size(), 12, "three readings, four sockets each")
+	assert_true(editor._unsaved)
+	_close(editor)
+
+func test_shrinking_takes_the_wires_with_it() -> void:
+	# A wire left pointing at a socket that is gone is one the validator rejects
+	# and the canvas cannot draw, so it has to go when the socket does.
+	var editor := _open()
+	editor.graph.add_node(&"r", &"ray", { &"segments": 2.0 })
+	editor.graph.add_node(&"gas", &"out_throttle")
+	editor.graph.connect_ports(&"r", &"distance_1", &"gas", &"value")
+	editor._rebuild_canvas()
+	assert_eq(editor.graph.wires.size(), 1)
+
+	editor._on_shape_changed(&"r", 1)
+	assert_eq(editor.graph.wires.size(), 0, "the wire went with the socket")
+	assert_eq(BrainValidator.validate(editor.graph, editor.registry).size(), 0)
+	_close(editor)
+
+func test_shrinking_leaves_wires_that_still_have_a_socket() -> void:
+	var editor := _open()
+	editor.graph.add_node(&"r", &"ray", { &"segments": 3.0 })
+	editor.graph.add_node(&"gas", &"out_throttle")
+	editor.graph.connect_ports(&"r", &"distance", &"gas", &"value")
+	editor._rebuild_canvas()
+
+	editor._on_shape_changed(&"r", 1)
+	assert_eq(editor.graph.wires.size(), 1, "segment one survives, so its wire does")
+	_close(editor)
+
+func test_a_node_cannot_be_grown_past_its_limit() -> void:
+	var editor := _open()
+	editor.graph.add_node(&"r", &"ray")
+	editor._on_shape_changed(&"r", 99)
+	assert_almost_eq(editor.graph.instances[&"r"].config[&"segments"], 8.0)
+	editor._on_shape_changed(&"r", -5)
+	assert_almost_eq(editor.graph.instances[&"r"].config[&"segments"], 1.0)
+	_close(editor)
+
+func test_a_choice_setting_is_a_dropdown() -> void:
+	var editor := _open()
+	editor.graph.add_node(&"r", &"ray")
+	editor._rebuild_canvas()
+
+	var found := false
+	for row: Node in _ray_view(editor).get_children():
+		for cell: Node in row.get_children():
+			for widget: Node in (cell.get_children() if cell.get_child_count() > 0 else []):
+				if widget is OptionButton:
+					found = true
+					assert_eq((widget as OptionButton).item_count, 2, "ring or cone")
+	assert_true(found, "the set selector must be a dropdown, not a number box")
+	_close(editor)
+
+func test_picking_the_cone_rebuilds_the_node() -> void:
+	var editor := _open()
+	editor.graph.add_node(&"r", &"ray")
+	editor._rebuild_canvas()
+	editor._on_config_changed(&"r", &"arc", "cone")
+	assert_eq(editor.graph.instances[&"r"].config[&"arc"], "cone")
+	assert_almost_eq(editor.registry.get_type(&"ray").fields_for(
+		editor.graph.instances[&"r"].config)[1].maximum, 5.0, 1e-6,
+		"a cone only has six rays to choose from")
+	_close(editor)

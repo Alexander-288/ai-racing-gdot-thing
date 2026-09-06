@@ -47,7 +47,11 @@ static func serialize(graph: BrainGraph) -> String:
 	for inst: BrainGraph.Instance in graph.instances.values():
 		out.append("node %s %s" % [inst.id, inst.type_id])
 		# Where it sits on the canvas. Layout only — the runtime ignores it.
-		if inst.position != Vector2.ZERO:
+		#
+		# Written for every placed node, including one sitting exactly at the
+		# origin. Leaving that one out was indistinguishable from never having
+		# placed it, so it got shuffled somewhere else on the next load.
+		if inst.placed:
 			out.append("    at %s %s" % [_write_float(inst.position.x), _write_float(inst.position.y)])
 		# Sorted so the same graph always writes byte-identical text.
 		var keys: Array = inst.config.keys()
@@ -207,6 +211,7 @@ static func _read_config(line: String, node: BrainGraph.Instance, line_no: int, 
 		else:
 			node.position = Vector2(_read_float(coords[0], line_no, result),
 				_read_float(coords[1], line_no, result))
+			node.placed = true
 		return
 
 	var split_at := line.find("=")

@@ -366,6 +366,7 @@ func _on_moved() -> void:
 	for id: StringName in _views:
 		var view: NodeView = _views[id]
 		graph.instances[id].position = view.position_offset
+		graph.instances[id].placed = true
 	for tray_id: StringName in _trays:
 		graph.get_tray(tray_id).position = (_trays[tray_id] as TrayView).position_offset
 	_mark_unsaved()
@@ -490,7 +491,7 @@ func _sink_trays() -> void:
 func _auto_layout() -> void:
 	var unplaced: Array[StringName] = []
 	for inst: BrainGraph.Instance in graph.instances.values():
-		if inst.position == Vector2.ZERO:
+		if not inst.placed:
 			unplaced.append(inst.id)
 	if unplaced.is_empty():
 		return
@@ -510,6 +511,7 @@ func _auto_layout() -> void:
 		var row: int = int(used_rows.get(column, 0))
 		used_rows[column] = row + 1
 		graph.instances[id].position = Vector2(60 + column * 280, 40 + row * 240)
+		graph.instances[id].placed = true  # laid out once, then left alone
 
 ## Wires are stored by port name but drawn by slot number, so this is where the
 ## two representations meet.

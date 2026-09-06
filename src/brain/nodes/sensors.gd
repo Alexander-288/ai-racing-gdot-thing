@@ -42,9 +42,15 @@ static func ray() -> NodeType:
 			# The index only goes as far as the chosen set has rays, so a cone
 			# cannot be asked for a seventh ray it does not have.
 			var arc := _segment_arc(cfg, i)
-			fields.append(ConfigField.choice(StringName("arc" + tail), "arc" + shown, ["ring", "cone"]))
+			# Each segment owns four socket rows, so its two settings sit against
+			# the first two of them. Without this the settings run down the left
+			# in one block and a later segment's arc ends up beside an earlier
+			# segment's sockets.
+			var first_row := i * 4
+			fields.append(ConfigField.choice(StringName("arc" + tail), "arc" + shown,
+				["ring", "cone"]).beside(first_row))
 			fields.append(ConfigField.number(StringName("index" + tail), "ray" + shown,
-				0.0, float(SensorSnapshot.rays_in(arc) - 1), 1.0))
+				0.0, float(SensorSnapshot.rays_in(arc) - 1), 1.0).beside(first_row + 1))
 		return { &"inputs": [] as Array[Port], &"outputs": outputs, &"fields": fields }
 
 	t.sense = func(snapshot: SensorSnapshot, cfg: Dictionary) -> Dictionary:

@@ -16,6 +16,12 @@ var key: StringName = &""
 var label: String = ""
 var kind: Kind = Kind.NUMBER
 
+## Which row of sockets this setting should line up with. -1 lets the editor put
+## it wherever it lands, which is right for a node with one or two settings. A
+## node that grows needs to say, or a later segment's settings drift away from
+## the sockets they control.
+var row: int = -1
+
 # NUMBER
 var minimum: float = -INF
 var maximum: float = INF
@@ -24,6 +30,12 @@ var step: float = 0.01
 # CHOICE: the values are what gets written to the brain file, so they are words
 # rather than numbers — a file should say "ring", not 0.
 var choices: Array[String] = []
+
+## Pins this setting to a socket row. Reads as part of the declaration:
+##   ConfigField.choice(...).beside(i * 4)
+func beside(which_row: int) -> ConfigField:
+	row = which_row
+	return self
 
 static func number(p_key: StringName, p_label: String,
 		p_min: float = -INF, p_max: float = INF, p_step: float = 0.01) -> ConfigField:

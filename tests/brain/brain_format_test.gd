@@ -137,3 +137,24 @@ func test_a_tray_does_not_disturb_the_nodes_around_it() -> void:
 func test_a_broken_tray_is_reported() -> void:
 	var result := BrainFormat.parse("format 1\ntray t \"G\"\n    at 10\n")
 	assert_false(result.ok(), "a tray with half a position is not silently accepted")
+
+func test_a_node_left_at_the_origin_stays_there() -> void:
+	# The origin used to be indistinguishable from "never placed", so a node
+	# parked exactly there was shuffled somewhere else on the next load.
+	var g := BrainGraph.new()
+	var node := g.add_node(&"c", &"constant")
+	node.position = Vector2.ZERO
+	node.placed = true
+
+	var text := BrainFormat.serialize(g)
+	assert_true(text.contains("at "), "a placed node writes where it is, origin or not")
+	var back := BrainFormat.parse(text)
+	assert_true(back.ok(), "  ".join(back.errors))
+	assert_eq(back.graph.instances[&"c"].position, Vector2.ZERO)
+	assert_true(back.graph.instances[&"c"].placed, "and it comes back placed")
+
+func test_a_hand_written_node_with_no_position_is_not_placed() -> void:
+	# Which is what lets the editor lay it out rather than stacking it at 0,0.
+	var result := BrainFormat.parse("format 1\nnode c constant\n    value = 1.0\n")
+	assert_true(result.ok(), "  ".join(result.errors))
+	assert_false(result.graph.instances[&"c"].placed)

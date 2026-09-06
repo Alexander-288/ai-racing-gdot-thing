@@ -9,6 +9,10 @@ class Instance extends RefCounted:
 	var type_id: StringName = &""
 	var config: Dictionary = {}
 	var position: Vector2 = Vector2.ZERO  # where it sits on the editor canvas
+	## Whether that position was chosen by somebody. A node nobody has placed is
+	## laid out automatically; a node somebody placed is left where it is — even
+	## if where they left it happens to be the origin.
+	var placed: bool = false
 
 ## A wire, always from an output socket to an input socket.
 class Wire extends RefCounted:
@@ -44,6 +48,7 @@ func add_node(id: StringName, type_id: StringName, config: Dictionary = {},
 	n.type_id = type_id
 	n.config = config
 	n.position = position
+	n.placed = position != Vector2.ZERO
 	instances[id] = n
 	return n
 

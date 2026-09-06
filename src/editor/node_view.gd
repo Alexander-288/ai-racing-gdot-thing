@@ -105,16 +105,30 @@ func _build_body(instance: BrainGraph.Instance) -> void:
 	input_ports = inputs
 	output_ports = outputs
 
-	var left: Array[Control] = []
-	for port: Port in inputs:
-		left.append(_socket_label(port.display_name, HORIZONTAL_ALIGNMENT_LEFT))
-	for field: ConfigField in type.fields_for(instance.config):
-		left.append(_setting_cell(instance, field))
+	# The left column, row by row. Inputs come first, then settings — except that
+	# a setting may ask to sit beside a particular socket row, which is how a node
+	# that grows keeps each segment's controls next to the sockets they drive.
+	var left: Dictionary = {}
+	for i in inputs.size():
+		left[i] = _socket_label(inputs[i].display_name, HORIZONTAL_ALIGNMENT_LEFT)
 
-	for i in maxi(left.size(), outputs.size()):
+	var next_free := inputs.size()
+	for field: ConfigField in type.fields_for(instance.config):
+		var row_index := field.row
+		if row_index < inputs.size():
+			row_index = -1  # asked for a row an input already owns
+		if row_index < 0:
+			row_index = next_free
+		while left.has(row_index):
+			row_index += 1
+		left[row_index] = _setting_cell(instance, field)
+		next_free = maxi(next_free, row_index + 1)
+
+	var rows := maxi(outputs.size(), next_free)
+	for i in rows:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 12)
-		row.add_child(left[i] if i < left.size() else _blank())
+		row.add_child(left[i] if left.has(i) else _blank())
 		row.add_child(_socket_label(
 			outputs[i].display_name if i < outputs.size() else "",
 			HORIZONTAL_ALIGNMENT_RIGHT))
@@ -122,7 +136,7 @@ func _build_body(instance: BrainGraph.Instance) -> void:
 
 		# Slot numbers are row numbers, and the editor turns them back into port
 		# names by index — so input i and output i must stay on row i. Settings
-		# take the rows below the inputs, where no input port can be looking.
+		# take rows no input port is looking at.
 		set_slot(i,
 			i < inputs.size(), _kind_of(inputs, i), _colour_of(inputs, i),
 			i < outputs.size(), _kind_of(outputs, i), _colour_of(outputs, i))
