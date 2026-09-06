@@ -11,9 +11,12 @@ func _load(name: String) -> BrainGraph:
 	return result.graph
 
 func _race(name: String, seed: int, laps: int = 2) -> RaceSession:
-	var track: Track = Track.grand_prix() if seed == 0 else Track.generated(seed)
+	var track: Track = Track.proving_circuit() if seed == 0 else Track.generated(seed)
 	var session := RaceSession.create(_load(name), _registry(), track)
-	session.run_until_lap(laps, 8000)
+	# Generous because a generated track is now a full-sized circuit: two laps of
+	# one is about ten thousand ticks, where two laps of the proving circuit is
+	# under two thousand.
+	session.run_until_lap(laps, 14000)
 	return session
 
 func test_it_is_a_legal_brain() -> void:
@@ -53,12 +56,19 @@ func test_it_beats_the_racer_on_tracks_it_has_never_seen() -> void:
 		var racer := _race("racer", seed)
 		assert_true(ace.ticks < racer.ticks,
 			"seed %d: ace %d vs racer %d" % [seed, ace.ticks, racer.ticks])
-		assert_almost_eq(ace.car.damage, 0.0, 0.02, "seed %d left it damaged" % seed)
+		# Not undamaged any more — a full-sized circuit has corners the old
+		# generated tracks did not. What matters is that it comes off no worse
+		# than the brain it is beating, and never far from clean. Written to allow
+		# both being zero, which is what an easy roll gives.
+		assert_true(ace.car.damage <= racer.car.damage,
+			"seed %d: ace %.2f damage vs racer %.2f"
+				% [seed, ace.car.damage, racer.car.damage])
+		assert_true(ace.car.damage < 0.25, "seed %d left it at %.2f" % [seed, ace.car.damage])
 
 func test_the_wheel_is_smoothed_rather_than_snapped() -> void:
 	# The steering runs through an accumulator, so it cannot jump from lock to
 	# lock in one tick. Without that the car judders and the telemetry is noise.
-	var session := RaceSession.create(_load("ace"), _registry(), Track.grand_prix())
+	var session := RaceSession.create(_load("ace"), _registry(), Track.proving_circuit())
 	var previous := 0.0
 	var biggest_jump := 0.0
 	for i in 600:
@@ -73,7 +83,7 @@ func test_the_wheel_is_smoothed_rather_than_snapped() -> void:
 func test_drs_latches_instead_of_chattering() -> void:
 	# A bare threshold flickers on and off while the input sits near it. The
 	# latch is what stops the wing strobing down a straight.
-	var session := RaceSession.create(_load("ace"), _registry(), Track.grand_prix())
+	var session := RaceSession.create(_load("ace"), _registry(), Track.proving_circuit())
 	var flips := 0
 	var was := false
 	var opened := 0
@@ -109,7 +119,7 @@ func test_it_is_no_worse_in_a_pack_than_the_brain_below_it() -> void:
 		var field: Array = []
 		for i in 10:
 			field.append(_load(name))
-		var session := RaceSession.create_field(field, registry, Track.grand_prix())
+		var session := RaceSession.create_field(field, registry, Track.proving_circuit())
 		for i in 900:
 			session.tick()
 		var total := 0.0

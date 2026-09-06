@@ -130,10 +130,12 @@ func _footer() -> HBoxContainer:
 	bar.add_child(spacer)
 
 	var track := OptionButton.new()
-	track.add_item("circuit", 0)
+	for i in Circuit.count():
+		track.add_item(Circuit.label_for(i), i)
 	for s in range(1, 6):
-		track.add_item("seed %d" % s, s)
-	track.select(seed)
+		var id := Circuit.GENERATED_BASE + s
+		track.add_item(Circuit.label_for(id), id)
+	track.select(maxi(track.get_item_index(seed), 0))
 	track.item_selected.connect(func(i: int) -> void: seed = track.get_item_id(i))
 	bar.add_child(track)
 

@@ -70,7 +70,7 @@ func _open_field(count: int) -> DebugView:
 	var graphs: Array = []
 	for i in count:
 		graphs.append(BrainFormat.parse(text).graph)
-	var view := DebugView.open_field(graphs, NodeRegistry.create_default(), Track.grand_prix())
+	var view := DebugView.open_field(graphs, NodeRegistry.create_default(), Track.proving_circuit())
 	view.size = Vector2(1000, 700)
 	Engine.get_main_loop().root.add_child(view)
 	return view

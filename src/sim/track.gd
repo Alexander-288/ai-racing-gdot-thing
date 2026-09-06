@@ -48,6 +48,13 @@ static func oval(radius_x: float = 60.0, radius_y: float = 38.0, corners: int = 
 	t.build_index()
 	return t
 
+## Everything a track needs once its centre line and width are set: the route
+## markers, then the lookup index. Circuit builds its tracks through this too, so
+## a hand-drawn circuit and a generated one are finished exactly the same way.
+func finish() -> void:
+	checkpoints = _pick_feature_checkpoints()
+	build_index()
+
 ## Must be called once after centre_line and half_width are set.
 func build_index() -> void:
 	_grid.clear()
@@ -178,20 +185,21 @@ func closest_point(point: Vector2) -> Vector2:
 			best = candidate
 	return best
 
-## A real circuit: a long straight, a fast sweeper, a hairpin, and a couple of
-## awkward direction changes. Corner radius varies a lot, which is the point —
-## on a shape where every corner is the same, one fixed throttle is unbeatable
-## and no brain has anything to think about.
+## The proving circuit: a small closed loop with corners of varying radius. Not
+## one of the named circuits and not offered in the editor — it exists so the sim
+## can be tested without a two-minute lap, and so Track has a shape of its own
+## that owes nothing to Circuit.
 ##
-## The centre line is sampled densely because it is the geometry. The checkpoints
-## are chosen separately, at features, and are deliberately few.
-static func grand_prix() -> Track:
+## Corner radius varies a lot, which is the point: on a shape where every corner
+## is the same, one fixed throttle is unbeatable and no brain has anything to
+## think about.
+static func proving_circuit() -> Track:
 	var t := Track.new()
 	t.half_width = 7.0
 
 	# A closed loop whose radius wanders. The harmonics are what make some
 	# corners tight and some sweeping, without the shape ever failing to close.
-	const SAMPLES := 180  # 2.5 m of detail on a 9 m wide track is plenty
+	const SAMPLES := 180  # 2.5 m of detail on a 14 m wide track is plenty
 	for i in SAMPLES:
 		var angle := TAU * float(i) / float(SAMPLES)
 		# Tuned so the tightest corner is about 16 m: takeable at 32 m/s but not at
@@ -200,36 +208,131 @@ static func grand_prix() -> Track:
 		var radius := 76.0 + 20.0 * sin(angle * 2.0) + 10.0 * sin(angle * 3.0 + 0.8)
 		t.centre_line.append(Vector2(sin(angle) * radius, cos(angle) * radius * 0.74))
 
-	t.checkpoints = t._pick_feature_checkpoints()
-	t.build_index()
+	t.finish()
 	return t
+
+## How finely every track is sampled, in metres. Chosen for the curvature
+## profile, which reads across three samples and would invent corners out of
+## sampling noise if they were much further apart.
+const SPACING := 2.5
 
 ## A track from a seed, drawn from the published distribution (spec 2.9): the
 ## shape family and the ranges are public, the seeds used on race day are not.
 ## This is what makes a held-out track pool possible — and what stops a brain
 ## being tuned to one circuit and calling itself general.
+##
+## Built the same way the named circuits are: waypoints round a ring, splined,
+## then scaled to a lap length. The angle only ever advances, so the shape cannot
+## cross itself however far the radius swings.
+##
+## Harmonics were the old way and they do not survive the change of scale. A
+## smooth sum of sines on a 450 m loop has corners a car has to brake for; the
+## same sum on a 2.7 km loop is all fast sweepers, because scaling a track up
+## makes every corner easier for a car whose grip has not changed. Waypoints at
+## uneven radii give corners that stay corners at any size.
 static func generated(seed: int) -> Track:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed  # seeded, so a given track is the same track for everyone
 
 	# Retried rather than clamped: some rolls produce a corner tighter than any
-	# car could take, and a track nobody can drive tests nothing.
-	for attempt in 12:
-		var t := Track.new()
-		t.half_width = rng.randf_range(7.0, 9.5)
-		var sweep := rng.randf_range(14.0, 24.0)
-		var kink := rng.randf_range(6.0, 14.0)
-		var phase := rng.randf_range(0.0, TAU)
-		var squash := rng.randf_range(0.68, 0.95)
-		for i in 180:
-			var angle := TAU * float(i) / 180.0
-			var radius := 76.0 + sweep * sin(angle * 2.0 + phase) + kink * sin(angle * 3.0 + phase * 1.7)
-			t.centre_line.append(Vector2(sin(angle) * radius, cos(angle) * radius * squash))
-		t.checkpoints = t._pick_feature_checkpoints()
-		t.build_index()
-		if t.tightest_corner() >= 14.0 and t.checkpoint_count() >= 6:
+	# car could take, and some produce a lap with nothing to slow down for. Both
+	# are tracks that test nothing.
+	# The window sits just inside the difficulty of the named circuits, which run
+	# from about eight metres at the Monaco hairpin to twenty-four at Silverstone.
+	# Held-out tracks are the scoring mechanism, so they are meant to be a fair
+	# test rather than a harder one than anything a brain was tuned against: the
+	# floor is above Monaco's hairpin, and the ceiling keeps a lap from having
+	# nothing to brake for at all.
+	for attempt in 24:
+		var t := _rolled(rng)
+		var tightest := t.tightest_corner()
+		if tightest >= 10.0 and tightest <= 30.0 and t.checkpoint_count() >= 10:
 			return t
-	return grand_prix()  # the roll never landed; fall back to the known-good one
+	return _rolled(rng)  # the rolls never landed; take the next as it comes
+
+static func _rolled(rng: RandomNumberGenerator) -> Track:
+	var t := Track.new()
+	t.half_width = rng.randf_range(6.0, 8.0)
+
+	var corners := rng.randi_range(24, 34)
+	var squash := rng.randf_range(0.70, 1.0)
+	var outline := PackedVector2Array()
+	for i in corners:
+		# The angle advances every step and never doubles back, which is what
+		# keeps the loop simple. Jitter is kept below the step so it cannot
+		# overtake the next point.
+		var angle := TAU * (float(i) + rng.randf_range(-0.20, 0.20)) / float(corners)
+		var radius := 430.0 * rng.randf_range(0.70, 1.05)
+		outline.append(Vector2(sin(angle) * radius, cos(angle) * radius * squash))
+
+	t.centre_line = resample_closed(
+		scaled_to_length(spline_through(outline), rng.randf_range(2400.0, 3200.0)), SPACING)
+	t.finish()
+	return t
+
+# ------------------------------------------------------------------- geometry
+#
+# Shared with Circuit, which draws its outlines by hand rather than rolling them.
+# They live here so the two kinds of track are built by exactly the same code,
+# and so Circuit can depend on Track without Track depending on Circuit.
+
+## Points generated between each pair of waypoints. Enough that the spline reads
+## as a curve rather than as facets.
+const SMOOTHNESS := 16
+
+## A closed Catmull-Rom spline through the waypoints. It passes through every one
+## of them, which is what makes a hand-drawn outline editable by eye: move a
+## point and the road moves to it, rather than near it.
+static func spline_through(points: PackedVector2Array) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var n := points.size()
+	for i in n:
+		var p0 := points[(i - 1 + n) % n]
+		var p1 := points[i]
+		var p2 := points[(i + 1) % n]
+		var p3 := points[(i + 2) % n]
+		for step in SMOOTHNESS:
+			var u := float(step) / float(SMOOTHNESS)
+			var u2 := u * u
+			var u3 := u2 * u
+			out.append(0.5 * ((2.0 * p1)
+				+ (-p0 + p2) * u
+				+ (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * u2
+				+ (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * u3))
+	return out
+
+static func curve_length(points: PackedVector2Array) -> float:
+	var total := 0.0
+	for i in points.size():
+		total += points[i].distance_to(points[(i + 1) % points.size()])
+	return total
+
+static func scaled_to_length(points: PackedVector2Array, target: float) -> PackedVector2Array:
+	var factor := target / maxf(curve_length(points), 0.001)
+	var out := PackedVector2Array()
+	for p: Vector2 in points:
+		out.append(p * factor)
+	return out
+
+## Walks the closed curve dropping a point every `spacing` metres, so the centre
+## line comes out evenly spaced however unevenly the waypoints were placed. The
+## curvature profile and the checkpoint picker both assume even spacing.
+static func resample_closed(points: PackedVector2Array, spacing: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var carried := 0.0
+	var n := points.size()
+	for i in n:
+		var a := points[i]
+		var b := points[(i + 1) % n]
+		var segment := a.distance_to(b)
+		if segment <= 0.0:
+			continue
+		var along := carried
+		while along < segment:
+			out.append(a.lerp(b, along / segment))
+			along += spacing
+		carried = along - segment
+	return out
 
 ## Radius of the tightest corner, in metres. A car can hold a corner of radius r
 ## only up to sqrt(MAX_LATERAL * r), so this is the number that says whether a

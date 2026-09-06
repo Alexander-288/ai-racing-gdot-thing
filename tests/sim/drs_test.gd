@@ -55,7 +55,7 @@ func test_drs_costs_cornering_grip() -> void:
 		"open turned %.3f rad, closed turned %.3f" % [open_turn, closed_turn])
 
 func test_the_car_reports_whether_it_is_open() -> void:
-	var track := Track.grand_prix()
+	var track := Track.proving_circuit()
 	var car := Car.at_start(track)
 	car.step(_controls(1.0, true), track)
 	assert_true(car.drs_open)
@@ -70,14 +70,14 @@ func test_a_brain_can_open_it() -> void:
 	g.add_node(&"drs", &"out_drs")
 	g.connect_ports(&"me", &"drs_available", &"drs", &"value")
 
-	var session := RaceSession.create(g, NodeRegistry.create_default(), Track.grand_prix())
+	var session := RaceSession.create(g, NodeRegistry.create_default(), Track.proving_circuit())
 	session.tick()
 	assert_true(session.car.drs_open, "the brain asked for it, the car opened it")
 
 func test_a_brain_can_tell_whether_it_is_allowed() -> void:
 	var g := BrainGraph.new()
 	g.add_node(&"me", &"self_state")
-	var session := RaceSession.create(g, NodeRegistry.create_default(), Track.grand_prix())
+	var session := RaceSession.create(g, NodeRegistry.create_default(), Track.proving_circuit())
 	session.tick()
 	# Always available for now, but the wire exists so the rule can tighten later
 	# without every brain needing rewiring.
@@ -94,11 +94,11 @@ func test_holding_it_open_through_the_corners_wrecks_the_car() -> void:
 	var errors := BrainValidator.validate(reckless, registry)
 	assert_eq(errors.size(), 0, "  ".join(errors))
 
-	var with_drs := RaceSession.create(reckless, registry, Track.grand_prix())
+	var with_drs := RaceSession.create(reckless, registry, Track.proving_circuit())
 	with_drs.run_until_lap(1, 6000)
 
 	var normal_graph := BrainFormat.parse(FileAccess.get_file_as_string("res://brains/racer.brain")).graph
-	var without := RaceSession.create(normal_graph, registry, Track.grand_prix())
+	var without := RaceSession.create(normal_graph, registry, Track.proving_circuit())
 	without.run_until_lap(1, 6000)
 
 	assert_almost_eq(without.car.damage, 0.0, 0.001, "the racer is clean without it")

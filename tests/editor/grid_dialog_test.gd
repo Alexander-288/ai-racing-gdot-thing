@@ -97,7 +97,7 @@ func test_filling_the_grid_and_racing_it() -> void:
 	for i in 5:
 		dialog.add_car()
 	var field := dialog.build_field()
-	var session := RaceSession.create_field(field, NodeRegistry.create_default(), Track.grand_prix())
+	var session := RaceSession.create_field(field, NodeRegistry.create_default(), Track.proving_circuit())
 	for i in 120:
 		session.tick()
 	for e: RaceSession.Entry in session.entries:

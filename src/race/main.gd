@@ -27,8 +27,8 @@ func _ready() -> void:
 	var field: Array = []
 	for i in 14:
 		field.append(BrainFormat.parse(FileAccess.get_file_as_string(BRAIN_PATH)).graph)
-	var session := RaceSession.create_field(field, registry, Track.grand_prix())
-	var finished := session.run_until_lap(3, 12000)
+	var session := RaceSession.create_field(field, registry, Circuit.track_for(0))
+	var finished := session.run_until_lap(3, 24000)
 
 	print('brain "%s"' % loaded.graph.name)
 	print("%d cars, %d ticks (%.1fs)" % [session.entries.size(), session.ticks, session.ticks * Car.TICK])

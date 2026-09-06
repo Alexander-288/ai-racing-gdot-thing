@@ -278,7 +278,7 @@ func test_a_hybrid_brain_drives_a_car() -> void:
 
 	assert_eq(BrainValidator.validate(g, _registry()).size(), 0, "hybrid must be legal")
 
-	var session := RaceSession.create(g, _registry(), Track.grand_prix())
+	var session := RaceSession.create(g, _registry(), Track.proving_circuit())
 	for i in 600:
 		session.tick()
 	assert_true(session.car.checkpoints_passed > 0, "a network-driven car should get moving")

@@ -21,7 +21,7 @@ func _field(count: int, cruise: float = 0.5) -> RaceSession:
 	var graphs: Array = []
 	for i in count:
 		graphs.append(_brain(cruise))
-	return RaceSession.create_field(graphs, NodeRegistry.create_default(), Track.grand_prix())
+	return RaceSession.create_field(graphs, NodeRegistry.create_default(), Track.proving_circuit())
 
 # ------------------------------------------------------------------ the grid
 
@@ -187,7 +187,7 @@ func test_only_four_radars_are_allowed() -> void:
 # ------------------------------------------------------------------ rays see cars
 
 func test_a_ray_reports_a_car_rather_than_the_wall_behind_it() -> void:
-	var track := Track.grand_prix()
+	var track := Track.proving_circuit()
 	var me := Car.at_grid_slot(track, 0, 2)
 	var them := Car.new()
 	them.position = me.position + me.forward() * 12.0  # sat right in front
@@ -201,7 +201,7 @@ func test_a_ray_reports_a_car_rather_than_the_wall_behind_it() -> void:
 		12.0 - Car.RADIUS, 0.3, "and report the near edge of it")
 
 func test_rays_ignore_the_car_casting_them() -> void:
-	var track := Track.grand_prix()
+	var track := Track.proving_circuit()
 	var me := Car.at_grid_slot(track, 0, 1)
 	var alone := SensorBuilder.build(me, track, [me], 0)
 	for i in SensorSnapshot.RAY_COUNT:

@@ -186,14 +186,18 @@ func _race_setup() -> VBoxContainer:
 	track_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	track_row.add_child(track_label)
 
-	# The hand-tuned circuit, then a few from the generator — a brain that only
-	# works on the first is exactly what held-out tracks are meant to catch.
+	# The named circuits, then a few from the generator — a brain that only works
+	# on the ones it was tuned against is exactly what held-out tracks catch.
 	var picker := OptionButton.new()
-	picker.custom_minimum_size.x = 70
-	picker.add_item("circuit", 0)
+	picker.custom_minimum_size.x = 96
+	for i in Circuit.count():
+		picker.add_item(Circuit.label_for(i), i)
 	for seed in range(1, 6):
-		picker.add_item("seed %d" % seed, seed)
-	picker.select(track_seed)
+		var id := Circuit.GENERATED_BASE + seed
+		picker.add_item(Circuit.label_for(id), id)
+	# An id is no longer its position in the list, so the two have to be
+	# translated rather than assumed equal.
+	picker.select(maxi(picker.get_item_index(track_seed), 0))
 	picker.item_selected.connect(func(i: int) -> void: track_seed = picker.get_item_id(i))
 	track_row.add_child(picker)
 	box.add_child(track_row)
@@ -224,7 +228,7 @@ func _close_dialog(dialog: GridDialog) -> void:
 	dialog.queue_free()
 
 func chosen_track() -> Track:
-	return Track.grand_prix() if track_seed == 0 else Track.generated(track_seed)
+	return Circuit.track_for(track_seed)
 
 ## Save is one click; the arrow beside it opens the less common choices. Keeping
 ## Save As behind a dropdown means the common action stays a single button, and
