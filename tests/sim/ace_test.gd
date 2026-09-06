@@ -98,3 +98,24 @@ func test_the_whole_ladder_still_climbs() -> void:
 	assert_true(braker < follower, "braker %d vs follower %d" % [braker, follower])
 	assert_true(ace < racer, "ace %d vs racer %d" % [ace, racer])
 	assert_true(ace < braker, "ace %d vs braker %d" % [ace, braker])
+
+func test_it_is_no_worse_in_a_pack_than_the_brain_below_it() -> void:
+	# Tuned on empty tracks it was the quickest and the most battered thing on the
+	# grid. A brain that finishes an endurance race in pieces has not won it
+	# (spec 2.2), so this holds the pack behaviour as well as the lap time.
+	var registry := _registry()
+	var damage: Dictionary = {}
+	for name: String in ["racer", "ace"]:
+		var field: Array = []
+		for i in 10:
+			field.append(_load(name))
+		var session := RaceSession.create_field(field, registry, Track.grand_prix())
+		for i in 900:
+			session.tick()
+		var total := 0.0
+		for e: RaceSession.Entry in session.entries:
+			total += e.car.damage
+		damage[name] = total / 10.0
+
+	assert_true(damage["ace"] < 0.45,
+		"ace averaged %.0f%% damage in a pack" % [damage["ace"] * 100.0])

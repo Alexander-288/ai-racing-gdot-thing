@@ -19,10 +19,17 @@
 #     the moment the road shortens or the route bends, and because reset beats set
 #     inside an accumulator the closing condition always wins. Without the latch
 #     the wing chatters open and shut at the threshold.
-#   * Watches the car ahead on radar and pulls to the side it is not on.
+#   * Watches the car ahead on radar and pulls gently to the side it is not on.
 #
 # The numbers below were found by sweeping them against four tracks, three of
 # which it had never seen. They are a local best, not a proof.
+#
+# One of them was found somewhere else. Sweeping on empty tracks produced a brain
+# that was quickest on its own and the most damaged of any of them in a pack --
+# it was tuned solo, so it had been tuned for solo. Halving push_k, the lane
+# change it makes around a car ahead, cut its damage in a fourteen-car race from
+# 40% to 26%, got it further round in the same time, and cost nothing over a
+# flying lap. It had been steering into traffic rather than past it.
 
 format 1
 name "Reference: Ace"
@@ -157,7 +164,7 @@ node reach constant
 node is_near threshold
 
 node push_k constant
-    value = -0.45
+    value = -0.22
 
 node push_raw multiply
 

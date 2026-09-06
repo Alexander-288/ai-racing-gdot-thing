@@ -1,6 +1,0 @@
-Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
-
-14 copies of each, 40 seconds:
-braker    avg damage  44%   contacts  352   laps  17
-racer     avg damage  29%   contacts  206   laps  18
-ace       avg damage  66%   contacts  324   laps  22
