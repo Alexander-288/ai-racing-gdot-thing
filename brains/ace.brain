@@ -1,0 +1,297 @@
+# Reference brain 4 of 4: the best a hand-built brain gets, with no network in it.
+#
+# Everything the vocabulary offers except a Dense Layer. Against the racer it is
+# about a sixth quicker over a lap and takes the same nothing in damage.
+#
+# What it does that the racer does not:
+#
+#   * Brakes for the corner after next as well as the next one, so it is already
+#     slowing when it arrives rather than slowing because it arrived.
+#   * Works out a corner speed instead of holding a fixed one: the sharper the
+#     turn ahead, the lower the speed it will allow, and the more damaged the car
+#     the lower again. A hurt car stops driving like a healthy one.
+#   * Steers on two spreads of rays at once. The narrow pair shapes the line
+#     through a corner; the wide pair is what saves it when the line is wrong.
+#   * Filters its own steering through memory. The wheel holds where it is and
+#     moves a share of the way to where it wants to be each tick, which is a
+#     first-order filter and a legal loop — it passes through an accumulator.
+#   * Latches DRS rather than switching it. It opens on a long straight and drops
+#     the moment the road shortens or the route bends, and because reset beats set
+#     inside an accumulator the closing condition always wins. Without the latch
+#     the wing chatters open and shut at the threshold.
+#   * Watches the car ahead on radar and pulls to the side it is not on.
+#
+# The numbers below were found by sweeping them against four tracks, three of
+# which it had never seen. They are a local best, not a proof.
+
+format 1
+name "Reference: Ace"
+
+node cp checkpoint
+    index = 0.0
+
+node cp_next checkpoint
+    index = 1.0
+
+node me self_state
+
+node eye radar
+    target = "ahead"
+
+node rays ray
+    index = 0.0
+    segments = 5.0
+    index_4 = 1.0
+    arc_4 = "ring"
+    index_3 = 7.0
+    arc_3 = "ring"
+    index_2 = 5.0
+    arc_2 = "cone"
+    index_1 = 0.0
+    arc_1 = "cone"
+    arc = "ring"
+
+node sharp_now abs
+
+node sharp_next_raw abs
+
+node look_w constant
+    value = 0.3
+
+node sharp_next multiply
+
+node sharp max
+
+node base_v constant
+    value = 44.0
+
+node sharp_k constant
+    value = 34.0
+
+node drop multiply
+
+node raw_v subtract
+
+node one constant
+    value = 1.0
+
+node caution constant
+    value = 0.45
+
+node hurt multiply
+
+node health subtract
+
+node safe_raw multiply
+
+node crawl constant
+    value = 17.0
+
+node safe_v max
+
+node over subtract
+
+node zero constant
+    value = 0.0
+
+node excess max
+
+node closeness subtract
+
+node wall_k constant
+    value = 0.2
+
+node wall_push multiply
+
+node brake_k constant
+    value = 0.09
+
+node urgency add
+
+node brake_amount multiply
+
+node brake out_brake
+
+node under threshold
+
+node floor_gas constant
+    value = 0.45
+
+node gas_amount max
+
+node gas out_throttle
+
+node cp_k constant
+    value = 2.8
+
+node aim multiply
+
+node near_lean subtract
+
+node wide_lean subtract
+
+node near_k constant
+    value = 3.0
+
+node wide_k constant
+    value = 0.7
+
+node near_dodge multiply
+
+node wide_dodge multiply
+
+node dodge add
+
+node rival_side abs
+
+node soft constant
+    value = 0.6
+
+node side_size add
+
+node rival_sign divide
+
+node reach constant
+    value = 22.0
+
+node is_near threshold
+
+node push_k constant
+    value = -0.45
+
+node push_raw multiply
+
+node push multiply
+
+node steer_wish add
+
+node steer_target add
+
+node wheel accumulator
+
+node gap subtract
+
+node ease constant
+    value = 0.65
+
+node nudge multiply
+
+node steer out_steering
+
+node open_at constant
+    value = 0.72
+
+node road_long threshold
+
+node calm_at constant
+    value = 0.12
+
+node is_calm threshold
+
+node want_drs multiply
+
+node close_at constant
+    value = 0.42
+
+node road_short threshold
+
+node not_calm subtract
+
+node drop_drs max
+
+node drs_latch accumulator
+
+node half constant
+    value = 0.5
+
+node drs_on threshold
+
+node wing out_drs
+
+wire cp.angle -> sharp_now.value
+wire cp_next.angle -> sharp_next_raw.value
+wire sharp_next_raw.out -> sharp_next.a
+wire look_w.out -> sharp_next.b
+wire sharp_now.out -> sharp.a
+wire sharp_next.out -> sharp.b
+wire sharp.out -> drop.a
+wire sharp_k.out -> drop.b
+wire base_v.out -> raw_v.a
+wire drop.out -> raw_v.b
+wire me.damage -> hurt.a
+wire caution.out -> hurt.b
+wire one.out -> health.a
+wire hurt.out -> health.b
+wire raw_v.out -> safe_raw.a
+wire health.out -> safe_raw.b
+wire safe_raw.out -> safe_v.a
+wire crawl.out -> safe_v.b
+wire me.speed -> over.a
+wire safe_v.out -> over.b
+wire over.out -> excess.a
+wire zero.out -> excess.b
+wire one.out -> closeness.a
+wire rays.distance -> closeness.b
+wire closeness.out -> wall_push.a
+wire wall_k.out -> wall_push.b
+wire brake_k.out -> urgency.a
+wire wall_push.out -> urgency.b
+wire excess.out -> brake_amount.a
+wire urgency.out -> brake_amount.b
+wire brake_amount.out -> brake.value
+wire safe_v.out -> under.value
+wire me.speed -> under.target
+wire floor_gas.out -> gas_amount.a
+wire under.out -> gas_amount.b
+wire gas_amount.out -> gas.value
+wire cp.angle -> aim.a
+wire cp_k.out -> aim.b
+wire rays.distance_2 -> near_lean.a
+wire rays.distance_1 -> near_lean.b
+wire rays.distance_4 -> wide_lean.a
+wire rays.distance_3 -> wide_lean.b
+wire near_lean.out -> near_dodge.a
+wire near_k.out -> near_dodge.b
+wire wide_lean.out -> wide_dodge.a
+wire wide_k.out -> wide_dodge.b
+wire near_dodge.out -> dodge.a
+wire wide_dodge.out -> dodge.b
+wire eye.right -> rival_side.value
+wire rival_side.out -> side_size.a
+wire soft.out -> side_size.b
+wire eye.right -> rival_sign.a
+wire side_size.out -> rival_sign.b
+wire reach.out -> is_near.value
+wire eye.distance -> is_near.target
+wire rival_sign.out -> push_raw.a
+wire push_k.out -> push_raw.b
+wire push_raw.out -> push.a
+wire is_near.out -> push.b
+wire aim.out -> steer_wish.a
+wire dodge.out -> steer_wish.b
+wire steer_wish.out -> steer_target.a
+wire push.out -> steer_target.b
+wire steer_target.out -> gap.a
+wire wheel.out -> gap.b
+wire gap.out -> nudge.a
+wire ease.out -> nudge.b
+wire nudge.out -> wheel.add
+wire wheel.out -> steer.value
+wire rays.distance -> road_long.value
+wire open_at.out -> road_long.target
+wire calm_at.out -> is_calm.value
+wire sharp.out -> is_calm.target
+wire road_long.out -> want_drs.a
+wire is_calm.out -> want_drs.b
+wire close_at.out -> road_short.value
+wire rays.distance -> road_short.target
+wire one.out -> not_calm.a
+wire is_calm.out -> not_calm.b
+wire road_short.out -> drop_drs.a
+wire not_calm.out -> drop_drs.b
+wire want_drs.out -> drs_latch.set_trigger
+wire one.out -> drs_latch.set_value
+wire drop_drs.out -> drs_latch.reset
+wire drs_latch.out -> drs_on.value
+wire half.out -> drs_on.target
+wire drs_on.out -> wing.value

@@ -50,6 +50,7 @@ A brain is a text file of nodes and wires. Three reference brains ship as a ladd
 | [follower](brains/follower.brain) | the route alone, one fixed throttle | finishes, slowly |
 | [braker](brains/braker.brain) | the route, lifting for corners | quickest on its own circuit, takes damage elsewhere |
 | [racer](brains/racer.brain) | the route **and** its rays | as quick, and never touches a wall |
+| [ace](brains/ace.brain) | everything but a network | about a sixth quicker again, still clean |
 
 The braker beats the racer on the circuit it was tuned for and loses to it everywhere
 else. That gap is the whole reason held-out tracks are the scoring mechanism (spec 2.9).
