@@ -21,11 +21,27 @@ func _ready() -> void:
 	cables = CableLayer.build(self)
 	# Inside GraphEdit's own connection surface, so the strands land exactly where
 	# the rails do at any zoom, and stay behind the nodes.
+	# The cables are a sibling of the nodes, not a child of the connection layer.
+	#
+	# Parented under the connection layer they came out beneath GraphEdit's own
+	# line, which is thin and dark, and on a wide cable that read as a seam
+	# splitting the core in two. Raising them with z_index fixed that and broke
+	# something worse: z_index is not scoped to the canvas, so lifting the nodes
+	# back over the cables lifted them over the minimap, the toolbar, the dialogs
+	# and the test-drive view as well.
+	#
+	# Child order is the canvas's own layering — it is already how trays are kept
+	# underneath (BrainEditor._sink_trays) — so the cables just take their place
+	# in it: after the connection layer, before any node. Everything keeps the
+	# z_index it was born with, and nothing escapes the canvas.
+	add_child(cables)
 	var surface := get_node_or_null(^"_connection_layer")
 	if surface != null:
-		surface.add_child(cables)
-	else:
-		add_child(cables)
+		move_child(cables, surface.get_index() + 1)
+	# GraphEdit no longer draws the wire you are dragging, so the layer has to be
+	# told a drag is happening in order to draw it instead.
+	connection_drag_started.connect(cables.on_drag_started)
+	connection_drag_ended.connect(cables.on_drag_ended)
 
 func _get_connection_line(from: Vector2, to: Vector2) -> PackedVector2Array:
 	return spine(from, to)

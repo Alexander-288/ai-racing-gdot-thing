@@ -12,14 +12,27 @@ extends RefCounted
 ## network is actually built out of — so it gets the loom: four violet strands in
 ## slightly different tones over a thin backing rail.
 
-## The plain wire: a single core, no wider than it needs to be.
-const PLAIN_WIDTH := 2.4
+## The plain wire: a single core. Heavy enough to read as a cable rather than as
+## a pen stroke — a node canvas is mostly wire, so the wire is the drawing.
+const PLAIN_WIDTH := 3.4
 
 ## The loom, for bundles only.
 const STRANDS := 4
-const STRAND_WIDTH := 1.4
-const GAP := 4.6            # between strand centres
-const BACKING_WIDTH := 1.0  # the rail beneath them, drawn by GraphEdit itself
+const STRAND_WIDTH := 2.2
+const GAP := 5.2            # between strand centres
+## GraphEdit draws its own line per connection, at a hairline width that never
+## scales with zoom. Under a loom it showed through the gap down the middle as a
+## stray thread, and on a magnified canvas it stayed stubbornly one pixel while
+## everything round it grew. Nothing is lost by switching it off: every cable you
+## see is drawn by CableLayer, which also picks up the drag preview GraphEdit
+## used to draw with this.
+const BACKING_WIDTH := 0.0
+
+## How wide the whole loom is at rest, outer edge to outer edge. A bundle socket
+## is built from this, so the plug is always at least as big as the thing that
+## plugs into it — see EditorTheme.bundle_port.
+static func loom_span() -> float:
+	return (STRANDS - 1) * GAP + STRAND_WIDTH
 
 ## How much each strand differs from its cable's base colour: lighter at the top
 ## of the loom, darker at the bottom, as if one light were falling across it.
@@ -40,17 +53,17 @@ const FLOW_SPEED := 55.0     # pixels a second, at zoom 1
 const FLOW_LENGTH := 190.0   # how far apart the bands are
 const FLOW_LIFT := 0.30      # how much brighter the crest is than the trough
 
-## How much thicker a cable gets as you zoom in — and it is not simply the zoom.
+## How much thicker a cable gets as you zoom in.
 ##
-## A cable scaled one for one is a 0.4px thread at the far end of the zoom range
-## and a 4px rope at the near end: the first aliases into flicker, the second
-## stops reading as a wire and starts reading as a pipe. Raising the zoom to a
-## power below one keeps the change legible at both ends — at zoom 3 a strand
-## comes out a little over twice its resting width rather than three times.
+## One, meaning a cable scales exactly as the nodes do. Zooming is then a
+## magnifying glass over one drawing: a wire keeps the same proportion to the box
+## it plugs into at every zoom, so nothing appears to change size — which is the
+## point. A number below one would make cables shrink relative to the nodes as
+## you zoom in, and the canvas would read as a different drawing at each zoom.
 ##
 ## Strand spacing is scaled by the same number, so the loom keeps its proportions
-## instead of the strands merging when thin or splaying apart when fat.
-const WIDTH_RESPONSE := 0.6
+## rather than merging into a braid or splaying into four separate wires.
+const WIDTH_RESPONSE := 1.0
 
 static func zoom_scale(zoom: float) -> float:
 	return pow(zoom, WIDTH_RESPONSE)

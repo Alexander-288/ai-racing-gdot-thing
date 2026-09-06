@@ -148,6 +148,37 @@ static func connector(width: int = 14, height: int = 8, radius: float = 3.0) -> 
 				img.set_pixel(x, y, Color(shade, shade, shade, alpha))
 	return _baked(img, Vector2i(width, height))
 
+## A plain socket: narrow, because one number needs no more room than that.
+const PORT_WIDTH := 9
+const PORT_HEIGHT := 8
+
+## How much taller a bundle socket is than the loom that plugs into it.
+const BUNDLE_PADDING := 4
+
+## Sockets are asked for once per slot per node, so the handful of distinct ones
+## are kept rather than redrawn — see _dots for the same reasoning.
+static var _ports: Dictionary = {}
+
+## What a single wire plugs into.
+static func plain_port() -> ImageTexture:
+	if not _ports.has(&"plain"):
+		_ports[&"plain"] = connector(PORT_WIDTH, PORT_HEIGHT, PORT_HEIGHT * 0.5)
+	return _ports[&"plain"]
+
+## What a bundle plugs into: the same connector stood on end and made tall enough
+## to swallow the whole loom with a little to spare. Eight numbers arriving at
+## once should look like they arrive somewhere built for them, rather than into
+## the same hole as a single number.
+##
+## The span is passed in rather than read from CableStyle, so the two files stay
+## pointing one way — CableStyle already reads its colours from here.
+static func bundle_port(loom_span: float) -> ImageTexture:
+	var height := int(ceil(loom_span)) + BUNDLE_PADDING
+	var key := &"bundle%d" % height
+	if not _ports.has(key):
+		_ports[key] = connector(PORT_WIDTH, height, PORT_WIDTH * 0.5)
+	return _ports[key]
+
 # ---------------------------------------------------------------- the pieces
 
 ## One flat box. Every stylebox below is this function with different arguments,
@@ -270,8 +301,9 @@ static func _nodes(t: Theme) -> void:
 	t.set_stylebox("slot", "GraphNode", empty(1))
 	t.set_constant("separation", "GraphNode", 1)
 	t.set_color("resizer_color", "GraphNode", TEXT_DIM)
-	# Sockets are connectors, not dots — see EditorTheme.connector.
-	t.set_icon("port", "GraphNode", connector())
+	# Sockets are connectors, not dots — see EditorTheme.connector. This is the
+	# fallback shape; NodeView hands each slot the one that matches its kind.
+	t.set_icon("port", "GraphNode", plain_port())
 
 ## The sidebar, and the two button shapes living in it. Type variations mean a
 ## palette button and a Save button can look different without either of them

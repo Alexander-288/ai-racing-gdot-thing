@@ -105,9 +105,8 @@ func _build_ui() -> void:
 	# read as wiring rather than as a flowchart.
 	_canvas.grid_pattern = GraphEdit.GRID_PATTERN_DOTS
 	_canvas.connection_lines_curvature = 0.65
-	# GraphEdit draws one hairline per wire and CableLayer paints over it: on a
-	# bundle that hairline shows through as the rail beneath the loom, and on an
-	# ordinary wire the single core covers it completely.
+	# Zero: GraphEdit draws no line of its own, CableLayer draws all of them.
+	# See CableStyle.BACKING_WIDTH.
 	_canvas.connection_lines_thickness = CableStyle.BACKING_WIDTH
 	_canvas.connection_lines_antialiased = true
 	# The sockets, dots and grips hold four texels per pixel they are shown at
@@ -472,6 +471,11 @@ func _rebuild_canvas() -> void:
 		_canvas.add_child(view)
 		_views[inst.id] = view
 
+	# Trays are built before the nodes but after the cable layer, so without this
+	# a tray would tint every wire crossing it. Sinking them on every rebuild —
+	# not only when one is clicked — keeps the canvas in one order: trays at the
+	# bottom, then GraphEdit's own line, then cables, then nodes.
+	_sink_trays()
 	_sync_connections()
 
 ## Trays live at the bottom of the canvas's child list, because that list is the

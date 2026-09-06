@@ -139,7 +139,8 @@ func _build_body(instance: BrainGraph.Instance) -> void:
 		# take rows no input port is looking at.
 		set_slot(i,
 			i < inputs.size(), _kind_of(inputs, i), _colour_of(inputs, i),
-			i < outputs.size(), _kind_of(outputs, i), _colour_of(outputs, i))
+			i < outputs.size(), _kind_of(outputs, i), _colour_of(outputs, i),
+			_port_icon(inputs, i), _port_icon(outputs, i))
 
 	if type.can_grow():
 		add_child(_grow_row(instance))
@@ -244,6 +245,16 @@ static func _kind_of(ports: Array[Port], i: int) -> int:
 	if i >= ports.size():
 		return 0
 	return 0 if ports[i].kind != Port.Kind.VECTOR else 1
+
+## A bundle gets a tall socket and everything else a narrow one, so the shape of
+## a port says what it carries before you read its colour. CableStyle owns the
+## decision, the same as it does for whether a cable is drawn as a loom.
+static func _port_icon(ports: Array[Port], i: int) -> Texture2D:
+	if i >= ports.size():
+		return null
+	if CableStyle.is_loom(ports[i].kind):
+		return EditorTheme.bundle_port(CableStyle.loom_span())
+	return EditorTheme.plain_port()
 
 static func _colour_of(ports: Array[Port], i: int) -> Color:
 	if i >= ports.size():
