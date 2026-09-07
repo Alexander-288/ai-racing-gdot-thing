@@ -28,3 +28,6 @@ crop*.png
 cull_*.png
 *.png.import
 !icon.svg.import
+
+# Local agent/editor tooling caches
+.impeccable/
