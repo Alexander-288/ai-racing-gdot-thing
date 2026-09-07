@@ -1,5 +1,7 @@
 # Formula AI: Grand Prix
 
+[![tests](https://github.com/Alexander-288/ai-racing-gdot-thing/actions/workflows/tests.yml/badge.svg)](https://github.com/Alexander-288/ai-racing-gdot-thing/actions/workflows/tests.yml)
+
 A 3D AI racing competition, built in Godot 4. You do not drive; you build a car's
 **brain** as a node graph, and the Grand Prix runs it on tracks the brain has never
 seen.
