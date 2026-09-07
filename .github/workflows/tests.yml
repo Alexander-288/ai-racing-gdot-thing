@@ -1,0 +1,44 @@
+name: tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  GODOT_VERSION: 4.7.2
+
+jobs:
+  headless-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The engine is not in version control; fetch the same version developers use.
+      - name: Cache Godot
+        id: cache-godot
+        uses: actions/cache@v4
+        with:
+          path: ~/godot
+          key: godot-${{ env.GODOT_VERSION }}-linux
+
+      - name: Download Godot
+        if: steps.cache-godot.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/godot
+          curl -sSLo /tmp/godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q /tmp/godot.zip -d ~/godot
+          chmod +x ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64
+
+      - name: Import assets
+        run: |
+          ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64 --headless --import
+
+      # run_tests.gd exits non-zero on failure, so the step fails on its own.
+      - name: Run test suite
+        run: |
+          ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64 --headless --script res://tests/run_tests.gd

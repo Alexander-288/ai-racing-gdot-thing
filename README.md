@@ -1,15 +1,27 @@
 # Formula AI: Grand Prix
 
-3D AI racing competition. Developers build car "brains" as node graphs; the Grand Prix
-runs on tracks the brains have never seen. Design spec:
-[docs/superpowers/specs/2026-08-30-formula-ai-grand-prix-design.md](docs/superpowers/specs/2026-08-30-formula-ai-grand-prix-design.md).
+A 3D AI racing competition, built in Godot 4. You do not drive; you build a car's
+**brain** as a node graph, and the Grand Prix runs it on tracks the brain has never
+seen.
 
-## Environment
+Every car is mechanically identical. Every sensor budget is fixed. No brain can know
+where it is in the world — it drives on egocentric senses alone: what its rays hit,
+what its radar sees, where the next checkpoints lie relative to its own nose. The brain
+is the only variable, so a race is a straight comparison of the ideas in it.
 
-Godot 4.7.2 (standard, not .NET) lives in `tools/godot/` and is **not** in version control.
-To recreate it, unzip the official `Godot_v4.7.2-stable_win64.zip` into that directory.
+Brains are files, not code. They are plain text, hand-editable, and the same format is
+the import path for weights trained outside the engine — the game only ever runs a
+network forwards.
+
+## Quickstart
+
+Godot 4.7.2 (standard, not .NET) lives in `tools/godot/` and is **not** in version
+control. To recreate it, unzip the official `Godot_v4.7.2-stable_win64.zip` into that
+directory.
 
     GODOT=./tools/godot/Godot_v4.7.2-stable_win64_console.exe
+    $GODOT --headless --import      # first checkout: import assets
+    $GODOT                          # opens the brain editor
 
 | Task | Command |
 | --- | --- |
@@ -18,32 +30,36 @@ To recreate it, unzip the official `Godot_v4.7.2-stable_win64.zip` into that dir
 | Open the brain editor (the main scene) | `$GODOT` |
 | Run the test suite | `$GODOT --headless --script res://tests/run_tests.gd` |
 
-The test runner exits non-zero on failure, so it drops straight into CI.
+The test runner exits non-zero on failure, so it drops straight into CI. Linux and
+macOS work the same way — point `GODOT` at the matching official build.
+
+From the editor: open a brain from `brains/`, hit **Test Drive** to watch it lap the
+test oval, or **Grid...** to put fourteen cars on a circuit and race them.
 
 ## Layout
 
     src/brain/    Brain runtime — node registry, graph, format, validator, evaluator.
     src/sim/      Sim core — track, car physics, sensor snapshot. Knows nothing about graphs.
-    src/editor/   GraphEdit UI over the node registry. Never evaluates anything. (empty)
+    src/editor/   GraphEdit UI over the node registry. Never evaluates anything.
     src/race/     Race session and entry point. Later: grid, seed, replays, cameras.
     scenes/       Godot scenes.
     brains/       Brain files (verbose, hand-editable text format).
     tracks/       Track definitions.
     tests/        Headless tests; any `*_test.gd` extending `TestCase` is auto-discovered.
 
-The four `src/` pieces are deliberately isolated — three of them are testable with no game running.
+The four `src/` pieces are deliberately isolated — three of them are testable with no
+game running.
 
 ## Determinism
 
-Non-negotiable from day one (spec §2.4). Fixed 60 Hz physics tick, all AI evaluated in
+Non-negotiable from day one. Fixed 60 Hz physics tick, all AI evaluated in
 `_physics_process`, seeded RNG, **no `delta`-dependent logic anywhere in the sim**.
 `physics_jitter_fix` and physics interpolation are off in `project.godot` because both
 reintroduce frame-rate dependence; `tests/harness_test.gd` asserts they stay off.
 
 ## Brains
 
-A brain is a text file of nodes and wires. Three reference brains ship as a ladder
-(spec 2.10):
+A brain is a text file of nodes and wires. Four reference brains ship as a ladder:
 
 | brain | drives on | unseen tracks |
 | --- | --- | --- |
@@ -53,11 +69,12 @@ A brain is a text file of nodes and wires. Three reference brains ship as a ladd
 | [ace](brains/ace.brain) | everything but a network | about a sixth quicker again, still clean |
 
 The braker beats the racer on the circuit it was tuned for and loses to it everywhere
-else. That gap is the whole reason held-out tracks are the scoring mechanism (spec 2.9).
+else. That gap is the whole reason held-out tracks are the scoring mechanism.
 `Track.generated(seed)` draws from a published distribution, so a track pool can be
 public in shape and secret in seed.
-Nodes are the source of truth (spec 2.3); the format is verbose and hand-editable on
-purpose, and it is the import path for weights trained outside the engine.
+
+Nodes are the source of truth; the format is verbose and hand-editable on purpose, and
+it is the import path for weights trained outside the engine.
 
 ## Status
 
@@ -66,15 +83,14 @@ test oval, driving only on egocentric senses — no absolute position anywhere.
 
 **The editor runs.** It is the main scene, so `$GODOT` opens it: a palette built from
 the registry, boxes coloured by node role, live validation, and save/load of `.brain`
-files. It never evaluates anything (spec 3). Hand-written brain files carry no
-positions, so anything at the origin is laid out left to right by how far downstream
-it sits.
+files. It never evaluates anything. Hand-written brain files carry no positions, so
+anything at the origin is laid out left to right by how far downstream it sits.
 
 **The circuit is a real test.** `Track.grand_prix()` has corners from 16 m to nearly
 straight, and only 11 checkpoints, placed at corner entry / apex / exit and down the
 middle of straights — sparse and irregular on purpose, so they give route and never a
-racing line (spec 2.5). The track is walled: running out of road is a collision that
-costs speed and does lasting damage, not a quiet slide onto grass.
+racing line. The track is walled: running out of road is a collision that costs speed
+and does lasting damage, not a quiet slide onto grass.
 
 Cornering is grip-limited, so turn radius grows with the *square* of speed. That is
 what makes braking a decision: flat out laps quickly and wrecks the car, cruising is
@@ -111,7 +127,7 @@ means and imported through the brain file, which is why that format stays readab
 and exact. A mis-shaped matrix is rejected on load, not discovered on track.
 
 Fairness budgets are enforced: 64 neurons and 8 accumulators per brain. Both are
-tuning knobs (spec 5); what matters is that the check runs before a race.
+tuning knobs; what matters is that the check runs before a race.
 
 **Phase 3, in part.** There is a grid: fourteen cars, staggered two abreast, each
 with its own brain. Cars collide with each other, rays see them, and four radar
@@ -132,3 +148,18 @@ them, each with its own set and index.
 Fourteen cars cost 13.4 ms a tick against a 16.6 ms budget, down from 27.1 ms.
 
 Next: Phase 4 — headless batch racing, self-play and telemetry.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) — how to get the engine, run the tests, and what
+a change is expected to look like here.
+
+## License
+
+[GNU Affero General Public License v3.0 or later](LICENSE).
+
+In short: you may use, study, change and share this, including commercially, as long as
+anything you distribute — or run as a network service people interact with — is offered
+under the same license, with source.
+
+The Godot engine itself is separately licensed (MIT) and is not part of this repository.
