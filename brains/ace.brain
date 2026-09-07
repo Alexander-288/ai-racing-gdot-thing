@@ -32,190 +32,286 @@
 # flying lap. It had been steering into traffic rather than past it.
 
 format 1
-name "Reference: Ace"
+name "Ace"
+
+tray tray_1 "DRS"
+    at 1743.93359375 1723.8760986328125
+    size 2117.89501953125 601.00244140625
+    colour 7
+
+tray tray_2 "Steering"
+    at 1469.88720703125 644.96929931640625
+    size 3655.06005859375 941.823486328125
+    colour 4
+
+tray tray_3 "Brake+Throtle"
+    at 1659.2508544921875 -161.33815002441406
+    size 2680.55615234375 734.595947265625
+    colour 2
+
+tray tray_4 "Straight Detect"
+    at -134.95343017578125 83.04864501953125
+    size 1187.3756103515625 496.6083984375
+    colour 1
+
+tray tray_5 "Damage Detect"
+    at -11.14263916015625 -267.34255981445312
+    size 912.0360107421875 326.310546875
 
 node cp checkpoint
+    at -400.0 100.0
     index = 0.0
 
 node cp_next checkpoint
+    at -87.223968505859375 277.20758056640625
     index = 1.0
 
 node me self_state
+    at -440.0 -380.0
 
 node eye radar
+    at 940.0 720.0
     target = "ahead"
 
 node rays ray
+    at -240.0 860.0
     index = 0.0
     segments = 5.0
-    index_4 = 1.0
-    arc_4 = "ring"
-    index_3 = 7.0
-    arc_3 = "ring"
-    index_2 = 5.0
-    arc_2 = "cone"
-    index_1 = 0.0
-    arc_1 = "cone"
     arc = "ring"
+    arc_1 = "cone"
+    index_1 = 0.0
+    arc_2 = "cone"
+    index_2 = 5.0
+    arc_3 = "ring"
+    index_3 = 7.0
+    arc_4 = "ring"
+    index_4 = 1.0
 
 node sharp_now abs
+    at 432.77593994140625 237.20758056640625
 
 node sharp_next_raw abs
+    at 212.77606201171875 317.20761108398437
 
 node look_w constant
+    at 172.77604675292969 417.20761108398437
     value = 0.3
 
 node sharp_next multiply
+    at 472.77593994140625 317.20761108398437
 
 node sharp max
+    at 752.77593994140625 257.20758056640625
 
 node base_v constant
+    at 2020.0 -100.0
     value = 44.0
 
 node sharp_k constant
+    at 1720.0 80.0
     value = 34.0
 
 node drop multiply
+    at 2020.0 0.0
 
 node raw_v subtract
+    at 2280.0 -40.0
 
 node one constant
+    at -880.0 620.0
     value = 1.0
 
 node caution constant
+    at 55.24365234375 -64.72357177734375
     value = 0.45
 
 node hurt multiply
+    at 395.24365234375 -124.72357177734375
 
 node health subtract
+    at 655.24359130859375 -264.72354125976562
 
 node safe_raw multiply
+    at 2540.0 0.0
 
 node crawl constant
+    at 2500.0 120.0
     value = 17.0
 
 node safe_v max
+    at 2800.0 0.0
 
 node over subtract
+    at 3180.0 -20.0
 
 node zero constant
+    at 3160.0 100.0
     value = 0.0
 
 node excess max
+    at 3480.0 20.0
 
 node closeness subtract
+    at 2480.0 300.0
 
 node wall_k constant
+    at 2440.0 400.0
     value = 0.2
 
 node wall_push multiply
+    at 2780.0 320.0
 
 node brake_k constant
+    at 2780.0 200.0
     value = 0.09
 
 node urgency add
+    at 3100.0 220.0
 
 node brake_amount multiply
+    at 3740.0 80.0
 
 node brake out_brake
+    at 3960.0 80.0
 
 node under threshold
+    at 3140.0 340.0
 
 node floor_gas constant
+    at 3520.0 240.0
     value = 0.45
 
 node gas_amount max
+    at 3820.0 340.0
 
 node gas out_throttle
+    at 4060.0 340.0
 
 node cp_k constant
+    at 3120.0 840.0
     value = 2.8
 
 node aim multiply
+    at 3480.0 760.0
 
 node near_lean subtract
+    at 2740.0 900.0
 
 node wide_lean subtract
+    at 2840.0 1140.0
 
 node near_k constant
+    at 2900.0 1000.0
     value = 3.0
 
 node wide_k constant
+    at 2620.0 1220.0
     value = 0.7
 
 node near_dodge multiply
+    at 3240.0 940.0
 
 node wide_dodge multiply
+    at 3120.0 1160.0
 
 node dodge add
+    at 3620.0 1080.0
 
 node rival_side abs
+    at 1620.0 1020.0
 
 node soft constant
+    at 1580.0 1100.0
     value = 0.6
 
 node side_size add
+    at 1960.0 1040.0
 
 node rival_sign divide
+    at 2260.0 1000.0
 
 node reach constant
+    at 2980.0 1380.0
     value = 22.0
 
 node is_near threshold
+    at 3400.0 1220.0
 
 node push_k constant
+    at 2300.0 1100.0
     value = -0.22
 
 node push_raw multiply
+    at 2660.0 1060.0
 
 node push multiply
+    at 3900.0 1160.0
 
 node steer_wish add
+    at 3900.0 1000.0
 
 node steer_target add
+    at 4160.0 1080.0
 
 node wheel accumulator
+    at 4580.0 1300.0
 
 node gap subtract
+    at 4460.0 1100.0
 
 node ease constant
+    at 4080.0 1320.0
     value = 0.65
 
 node nudge multiply
+    at 4340.0 1260.0
 
 node steer out_steering
+    at 4860.0 1360.0
 
 node open_at constant
+    at 1780.0 1820.0
     value = 0.72
 
 node road_long threshold
+    at 2140.0 1780.0
 
 node calm_at constant
+    at 1780.0 1900.0
     value = 0.12
 
 node is_calm threshold
+    at 2140.0 1880.0
 
 node want_drs multiply
+    at 2700.0 1860.0
 
 node close_at constant
+    at 2120.0 1980.0
     value = 0.42
 
 node road_short threshold
+    at 2420.0 2020.0
 
 node not_calm subtract
+    at 2420.0 2160.0
 
 node drop_drs max
+    at 2700.0 1960.0
 
 node drs_latch accumulator
+    at 3060.0 1800.0
 
 node half constant
+    at 3040.0 1940.0
     value = 0.5
 
 node drs_on threshold
+    at 3360.0 1880.0
 
 node wing out_drs
+    at 3580.0 1900.0
 
-wire cp.angle -> sharp_now.value
 wire cp_next.angle -> sharp_next_raw.value
 wire sharp_next_raw.out -> sharp_next.a
 wire look_w.out -> sharp_next.b
@@ -302,3 +398,4 @@ wire drop_drs.out -> drs_latch.reset
 wire drs_latch.out -> drs_on.value
 wire half.out -> drs_on.target
 wire drs_on.out -> wing.value
+wire cp.angle -> sharp_now.value
