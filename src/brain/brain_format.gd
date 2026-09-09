@@ -30,6 +30,15 @@ class ParseResult extends RefCounted:
 
 static func serialize(graph: BrainGraph) -> String:
 	var out: PackedStringArray = []
+	# The header comment goes back exactly where it was found. Anything set on
+	# notes that is not already a comment is commented out, so a graph built in
+	# code cannot write a file it could not read back.
+	if not graph.notes.is_empty():
+		for line: String in graph.notes.split("\n"):
+			var trimmed := line.strip_edges()
+			var already_a_comment := trimmed.is_empty() or trimmed.begins_with("#")
+			out.append(line if already_a_comment else "# " + line)
+		out.append("")
 	out.append("format %d" % FORMAT_VERSION)
 	out.append("name %s" % _quote(graph.name))
 	out.append("")
@@ -98,7 +107,10 @@ static func parse(text: String) -> ParseResult:
 	var current_tray: BrainGraph.Tray = null
 	var line_no := 0
 
-	for raw_line: String in text.split("\n"):
+	var lines := text.split("\n")
+	result.graph.notes = _read_notes(lines)
+
+	for raw_line: String in lines:
 		line_no += 1
 		var line := raw_line.strip_edges()
 		if line.is_empty() or line.begins_with("#"):  # whole-line comments only
@@ -133,6 +145,24 @@ static func parse(text: String) -> ParseResult:
 				result.errors.append("line %d: don't understand '%s'" % [line_no, parts[0]])
 
 	return result
+
+## The run of comment lines before the first directive, which is where every
+## reference brain explains itself. Kept as written, minus the blank lines that
+## top and tail it — serialize() puts the one below the block back.
+static func _read_notes(lines: PackedStringArray) -> String:
+	var header: PackedStringArray = []
+	for raw_line: String in lines:
+		var line := raw_line.strip_edges()
+		if not line.is_empty() and not line.begins_with("#"):
+			break
+		# Trailing \r, so a file saved with Windows line endings does not grow one
+		# every time it is read and written.
+		header.append(raw_line.rstrip("\r"))
+	while not header.is_empty() and header[0].strip_edges().is_empty():
+		header.remove_at(0)
+	while not header.is_empty() and header[header.size() - 1].strip_edges().is_empty():
+		header.remove_at(header.size() - 1)
+	return "\n".join(header)
 
 static func _read_format(parts: PackedStringArray, line_no: int, result: ParseResult) -> void:
 	if parts.size() != 2 or not parts[1].is_valid_int():

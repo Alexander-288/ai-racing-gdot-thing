@@ -35,6 +35,11 @@ class Tray extends RefCounted:
 
 var name: String = ""  # shown on the leaderboard, not used by the runtime
 
+## The comment block at the top of the file, kept verbatim so that saving from
+## the editor does not throw away what the author wrote about the brain. Held as
+## the raw lines, `#` and all. Comments further down the file are still dropped.
+var notes: String = ""
+
 # Insertion-ordered, which is what keeps evaluation order the same every load.
 var instances: Dictionary = {}
 var wires: Array[Wire] = []

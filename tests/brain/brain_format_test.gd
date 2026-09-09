@@ -158,3 +158,48 @@ func test_a_hand_written_node_with_no_position_is_not_placed() -> void:
 	var result := BrainFormat.parse("format 1\nnode c constant\n    value = 1.0\n")
 	assert_true(result.ok(), "  ".join(result.errors))
 	assert_false(result.graph.instances[&"c"].placed)
+
+const HEADER := """# Reference brain 4 of 4: the best a hand-built brain gets.
+#
+# What it does that the racer does not:
+#
+#   * Brakes for the corner after next as well as the next one.
+#   * Latches DRS rather than switching it."""
+
+func test_the_header_comment_survives_a_save() -> void:
+	# Saving from the editor used to drop it, which cost the ace the notes
+	# explaining how every constant in it had been tuned.
+	var text := HEADER + "\n\nformat 1\nname \"Ace\"\n\nnode c constant\n    value = 1.0\n"
+	var result := BrainFormat.parse(text)
+	assert_true(result.ok(), "  ".join(result.errors))
+	assert_eq(result.graph.notes, HEADER)
+
+	var written := BrainFormat.serialize(result.graph)
+	assert_true(written.begins_with(HEADER + "\n\nformat 1"),
+		"the block comes back verbatim, above the format line:\n" + written)
+
+	# And it is still there after a second trip, so the file survives repeated saves.
+	var again := BrainFormat.parse(written)
+	assert_eq(again.graph.notes, HEADER)
+	assert_eq(BrainFormat.serialize(again.graph), written)
+
+func test_a_brain_with_no_header_writes_none() -> void:
+	var text := BrainFormat.serialize(_counter_graph())
+	assert_true(text.begins_with("format 1"), text)
+
+func test_notes_written_in_code_are_commented_out() -> void:
+	# Nothing may write a file it could not read back.
+	var g := _counter_graph()
+	g.notes = "tuned on the oval"
+	var back := BrainFormat.parse(BrainFormat.serialize(g))
+	assert_true(back.ok(), "  ".join(back.errors))
+	assert_eq(back.graph.notes, "# tuned on the oval")
+
+func test_comments_further_down_the_file_are_still_dropped() -> void:
+	# The header is what the reference brains use; a comment beside one node is
+	# not kept, and this test is here to say so out loud rather than by accident.
+	var text := "format 1\n\n# the starting number\nnode one constant\n    value = 2.0\n"
+	var result := BrainFormat.parse(text)
+	assert_true(result.ok(), "  ".join(result.errors))
+	assert_eq(result.graph.notes, "")
+	assert_false(BrainFormat.serialize(result.graph).contains("starting number"))
